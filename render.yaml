@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: paperbot
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: SLOTS
+        value: "nse,fno,instocks,gstocks,macro,india,crypto,practice"
+      - key: LEARNING
+        value: "on"
+      - key: CRYPTO_FEED
+        value: coinbase
+      - key: START_BALANCE_INDIA
+        value: "10000"
+      - key: START_BALANCE_CRYPTO
+        value: "20"
+      - key: ADMIN_TOKEN
+        generateValue: true
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+      - key: SELF_URL
+        sync: false

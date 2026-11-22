@@ -1,0 +1,350 @@
+{
+ "families": [
+  {
+   "f": "sma_price",
+   "tested": 33,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.69
+  },
+  {
+   "f": "ema_price",
+   "tested": 34,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.71
+  },
+  {
+   "f": "sma_band",
+   "tested": 24,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.69
+  },
+  {
+   "f": "sma_cross",
+   "tested": 24,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.65
+  },
+  {
+   "f": "ema_cross",
+   "tested": 28,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.69
+  },
+  {
+   "f": "triple_ma",
+   "tested": 12,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.58
+  },
+  {
+   "f": "donchian",
+   "tested": 39,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.41
+  },
+  {
+   "f": "donchian_hl",
+   "tested": 19,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.42
+  },
+  {
+   "f": "roc",
+   "tested": 30,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.68
+  },
+  {
+   "f": "roc_band",
+   "tested": 16,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.7
+  },
+  {
+   "f": "tsmom",
+   "tested": 18,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.67
+  },
+  {
+   "f": "macd",
+   "tested": 40,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.58
+  },
+  {
+   "f": "rsi_trend",
+   "tested": 46,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 1,
+   "avgTimeInMarket": 0.57
+  },
+  {
+   "f": "rsi_mr",
+   "tested": 32,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 4,
+   "avgTimeInMarket": 0.19
+  },
+  {
+   "f": "rsi_mr_trend",
+   "tested": 44,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 7,
+   "avgTimeInMarket": 0.18
+  },
+  {
+   "f": "boll_break",
+   "tested": 29,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 1,
+   "avgTimeInMarket": 0.31
+  },
+  {
+   "f": "boll_mr",
+   "tested": 36,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 2,
+   "avgTimeInMarket": 0.16
+  },
+  {
+   "f": "keltner",
+   "tested": 24,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 1,
+   "avgTimeInMarket": 0.39
+  },
+  {
+   "f": "supertrend",
+   "tested": 46,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.61
+  },
+  {
+   "f": "adx_trend",
+   "tested": 29,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.41
+  },
+  {
+   "f": "aroon",
+   "tested": 22,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.64
+  },
+  {
+   "f": "stoch",
+   "tested": 29,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.38
+  },
+  {
+   "f": "cci",
+   "tested": 36,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.32
+  },
+  {
+   "f": "linreg",
+   "tested": 40,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.59
+  },
+  {
+   "f": "kama",
+   "tested": 28,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.65
+  },
+  {
+   "f": "near_high",
+   "tested": 24,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.58
+  },
+  {
+   "f": "dd_filter",
+   "tested": 28,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.57
+  },
+  {
+   "f": "vol_trend",
+   "tested": 40,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.58
+  },
+  {
+   "f": "vol_target_trend",
+   "tested": 16,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.55
+  },
+  {
+   "f": "ichimoku",
+   "tested": 10,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.62
+  },
+  {
+   "f": "gap_pullback",
+   "tested": 31,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 5,
+   "avgTimeInMarket": 0.06
+  },
+  {
+   "f": "ma_slope",
+   "tested": 16,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.67
+  },
+  {
+   "f": "ma_slope_price",
+   "tested": 22,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.63
+  },
+  {
+   "f": "combo",
+   "tested": 30,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 2,
+   "avgTimeInMarket": 0.42
+  },
+  {
+   "f": "pine_squeeze",
+   "tested": 16,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.45
+  },
+  {
+   "f": "pine_utbot",
+   "tested": 34,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.61
+  },
+  {
+   "f": "pine_ha",
+   "tested": 20,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.35
+  },
+  {
+   "f": "pine_ob",
+   "tested": 40,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 1,
+   "avgTimeInMarket": 0.21
+  },
+  {
+   "f": "pine_bos",
+   "tested": 10,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.64
+  },
+  {
+   "f": "pine_connors",
+   "tested": 28,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 2,
+   "avgTimeInMarket": 0.07
+  },
+  {
+   "f": "pine_ribbon",
+   "tested": 10,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.35
+  },
+  {
+   "f": "pine_stochrsi",
+   "tested": 22,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.54
+  },
+  {
+   "f": "pine_hma",
+   "tested": 13,
+   "lookahead": 0,
+   "nonBinary": 0,
+   "constantSeries": 0,
+   "avgTimeInMarket": 0.58
+  }
+ ],
+ "lookahead": [],
+ "cfg": []
+}

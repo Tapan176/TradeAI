@@ -1,0 +1,1 @@
+{ "name": "paperbot", "version": "3.0.0", "private": true, "description": "Adaptive multi-agent paper-trading bot + live dashboard (zero dependencies)", "main": "server.js", "scripts": { "start": "node server.js" }, "engines": { "node": ">=18" } }
