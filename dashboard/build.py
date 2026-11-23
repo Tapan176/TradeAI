@@ -1,0 +1,21 @@
+import re,sys
+t=open('template.html').read()
+eng=open('../engine.js').read()
+lwc=open('../server/public/vendor/lightweight-charts.js').read()
+ind=open('../data/indices_replay.json').read()
+labui=open('labui.js').read()
+pro=open('pro.js').read()
+app=open('app.js').read()
+def build(server):
+    s=t.replace('/*__LABUI__*/', labui if server else '')
+    s=s.replace('/*__PRO__*/', pro if server else '')
+    s=s.replace('/*__APP__*/', app if server else '')
+    s=s.replace('/*__SERVER_FLAG__*/false','true' if server else 'false')
+    s=s.replace('/*__ENGINE__*/', '' if server else eng.replace('</script>','<\\/script>'))
+    s=s.replace('<!--PWA-->','<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#1a1a19"><link rel="apple-touch-icon" href="icon-192.png"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes">' if server else '')
+    s=s.replace('<!--LWC-->','<script src="vendor/lightweight-charts.js"></script>' if server else '<script>'+lwc.replace('</script>','<\\/script>')+'</script>')
+    s=s.replace('/*__INDIA__*/null','null' if server else ind)
+    return s
+open('../server/public/index.html','w').write(build(True))
+open('/home/claude/tradingbot/dashboard/artifact.html','w').write(build(False))
+print('built', len(build(False)), len(build(True)))
