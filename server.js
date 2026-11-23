@@ -26,7 +26,7 @@ const LIVE_WARM = process.env.LIVE_WARM === 'on';
 const LEARN = (process.env.LEARNING || 'on') !== 'off';
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const UP_URL = process.env.UPSTASH_REDIS_REST_URL, UP_TOK = process.env.UPSTASH_REDIS_REST_TOKEN;
-const WANT = (process.env.SLOTS || 'nse,fno,instocks,gstocks,macro,india,crypto,practice').split(',').map(s => s.trim());
+const WANT = (process.env.SLOTS || 'nse,fno,instocks,gstocks,macro,india,crypto').split(',').map(s => s.trim());
 const CRYPTO_FEED = (process.env.CRYPTO_FEED || 'auto').toLowerCase();
 const PBPP = +process.env.PRACTICE_BARS_PER_POLL || 5;
 const UA = { 'User-Agent': 'Mozilla/5.0 paperbot/3.0', Accept: 'application/json' };
@@ -54,14 +54,30 @@ async function upstash(cmd, body) {
   if (!r.ok) throw new Error('upstash ' + r.status);
   return r.json();
 }
+const LAB = require('./lab/index.js'), zlib = require('zlib'), VAULT = require('./lab/vault.js');
+const enc = obj => 'gz:' + zlib.gzipSync(JSON.stringify(obj), { level: 6 }).toString('base64');
+const dec = str => { if (!str) return null; const s = String(str); return JSON.parse(s.startsWith('gz:') ? zlib.gunzipSync(Buffer.from(s.slice(3), 'base64')).toString('utf8') : s); };
+const lastSaved = {}, vaultQ = {};
+// Save order of safety: local file (instant, but wiped on every Render restart) -> Upstash (survives restarts; compressed, only when changed) -> GitHub vault (batched, see vaultStates)
 async function persist(name, obj) {
-  const json = JSON.stringify(obj);
-  try { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(fsKey(name), json); } catch (e) { /* ephemeral FS ok */ }
-  if (UP_URL && UP_TOK && json.length < 950000) { try { await upstash('set/' + upKey(name), json); } catch (e) { console.error('persist', name, e.message); } }
+  const z = enc(obj);
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(fsKey(name), z); } catch (e) { /* ephemeral FS ok */ }
+  vaultQ[name] = z;
+  if (UP_URL && UP_TOK && lastSaved[name] !== z) {
+    if (z.length >= 950000) { console.error('persist', name, 'too big for upstash even compressed:', z.length); return; }
+    try { await upstash('set/' + upKey(name), z); lastSaved[name] = z; } catch (e) { console.error('persist', name, e.message); }
+  }
 }
 async function restore(name) {
-  try { if (UP_URL && UP_TOK) { const r = await upstash('get/' + upKey(name)); if (r && r.result) return JSON.parse(r.result); } } catch (e) { console.error('restore', name, e.message); }
-  try { return JSON.parse(fs.readFileSync(fsKey(name), 'utf8')); } catch (e) { return null; }
+  try { if (UP_URL && UP_TOK) { const r = await upstash('get/' + upKey(name)); if (r && r.result) { console.log('restored', name, 'from upstash'); return dec(r.result); } } } catch (e) { console.error('restore', name, e.message); }
+  try { const o = dec(fs.readFileSync(fsKey(name), 'utf8')); if (o) { console.log('restored', name, 'from file'); return o; } } catch (e) { /* none */ }
+  try { if (VAULT.configured()) { const t = await VAULT.get('State/slot-' + name + '.json.gz64'); if (t) { console.log('restored', name, 'from vault'); return dec(t); } } } catch (e) { console.error('restore vault', name, e.message); }
+  return null;
+}
+const persistMode = () => [UP_URL && UP_TOK ? 'upstash' : null, VAULT.configured() ? 'vault' : null, 'file'].filter(Boolean).join('+');
+async function vaultStates(why) {   // slot snapshots into the GitHub vault: infrequent on purpose (keeps the repo small)
+  if (!VAULT.configured()) return; const ks = Object.keys(vaultQ); if (!ks.length) return;
+  ks.forEach(n => VAULT.put('State/slot-' + n + '.json.gz64', vaultQ[n])); try { await VAULT.flush(why || 'Slot state snapshot'); } catch (e) { console.error('vault states', e.message); }
 }
 
 /* ---------- feeds (NOT testable from the build sandbox: market-data hosts were blocked there) ---------- */
@@ -420,7 +436,7 @@ function segmentReport() {   // structured analysis: slot × segment × strategy
 function body(sl) {
   if (!sl.bot) return JSON.stringify({ error: 'waiting for market-data feed', note: sl.note });
   return JSON.stringify(Object.assign(tagSeg(sl.bot.snapshot(), sl.name), {
-    extra: sl.extra, server: { slot: sl.name, label: DEFS[sl.name].label, paused: sl.paused, pollMs: POLL, lastPollOk: sl.lastPollOk, failStreak: sl.failStreak, learning: LEARN, persist: UP_URL ? 'upstash+file' : 'file (ephemeral on free Render)', admin: !!TOKEN, slots: summary() }
+    extra: sl.extra, server: { slot: sl.name, label: DEFS[sl.name].label, paused: sl.paused, pollMs: POLL, lastPollOk: sl.lastPollOk, failStreak: sl.failStreak, learning: LEARN, persist: persistMode()+(UP_URL||VAULT.configured()?'':' (EPHEMERAL on free Render: set UPSTASH_* or VAULT_*)'), admin: !!TOKEN, slots: summary() }
   }));
 }
 
@@ -547,6 +563,18 @@ const server = http.createServer(async (req, res) => {
     return send(200, { istNow: istNow(), feeds: r });
   }
 
+  if (url.pathname === '/api/lab') return send(200, LAB.snapshot());
+  if (url.pathname === '/api/lab/symbols') return send(200, LAB.chartSymbols());
+  if (url.pathname === '/api/lab/prices') { try { return send(200, await LAB.prices()); } catch (e) { return send(502, { error: e.message }); } }
+  if (url.pathname === '/api/candles') { try { return send(200, await LAB.chart(url.searchParams.get('sym') || '^NSEI', url.searchParams.get('tf') || '15m')); } catch (e) { return send(502, { error: String(e.message || e) }); } }
+  if (req.method === 'POST' && url.pathname === '/api/lab/tg/ingest') {
+    if (!authed(req, url)) return send(401, { error: 'missing/invalid ADMIN_TOKEN' });
+    let b = ''; for await (const ch of req) { b += ch; if (b.length > 20000) break; }
+    let text = b; try { const j = JSON.parse(b); text = j.text || j.message || b; } catch (e) { /* raw text */ }
+    const sg = LAB.addSignal(text, Date.now() / 1000, 'manual'); return send(200, { accepted: !!sg, state: sg && sg.state, note: sg && sg.note });
+  }
+  if (req.method === 'POST' && url.pathname === '/api/lab/sync') { if (!authed(req, url)) return send(401, { error: 'missing/invalid ADMIN_TOKEN' }); try { const r = await LAB.flushNow(); await vaultStates('Manual state sync'); return send(200, { ok: true, r }); } catch (e) { return send(500, { error: e.message }); } }
+
   if (url.pathname.startsWith('/api/') && !sl) return send(404, { error: 'unknown bot' });
   if (url.pathname === '/api/state') { res.writeHead(sl.bot ? 200 : 503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); return res.end(body(sl)); }
   if (url.pathname === '/api/events') {
@@ -580,8 +608,10 @@ async function saveAll() { for (const n of Object.keys(slots)) { const s = slots
   for (const n of order.filter(x => x === 'practice')) { try { await DEFS[n].init(slots[n], false); } catch (e) { console.error('init', n, e.message); slots[n].note = e.message; } }
   await Promise.all(order.filter(x => x !== 'practice').map(async n => { try { await DEFS[n].init(slots[n], false); } catch (e) { console.error('init', n, e.message); slots[n].note = e.message; } }));
   for (const n of order) setInterval(() => loop(slots[n]), n === 'practice' ? Math.max(2000, POLL / 2) : (n === 'nse' || n === 'fno') ? (+process.env.NSE_POLL_MS || 30000) : (n === 'instocks' || n === 'gstocks' || n === 'macro') ? (+process.env.STOCKS_POLL_MS || 300000) : POLL);
-  setInterval(saveAll, 30000);
+  setInterval(saveAll, +process.env.SAVE_MS || 120000);
+  setInterval(() => vaultStates(), (+process.env.VAULT_STATE_MIN || 150) * 60000);
+  LAB.start({ store: { save: persist, load: restore } }).catch(e => console.error('lab start', e.message));
   if (process.env.SELF_URL) setInterval(() => fetch(process.env.SELF_URL + '/healthz').catch(() => {}), 10 * 60 * 1000);
-  const bye = async () => { await saveAll(); process.exit(0); };
+  const bye = async () => { try { await saveAll(); await LAB.shutdown(); await vaultStates('Shutdown snapshot'); } catch (e) { /* best effort */ } process.exit(0); };
   process.on('SIGTERM', bye); process.on('SIGINT', bye);
 })();

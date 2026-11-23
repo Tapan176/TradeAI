@@ -48,3 +48,26 @@ Charts use TradingView Lightweight Charts 5.3.0 (Apache-2.0), vendored at `publi
 - `research/multi.js` – every strategy family on India indices/ETFs/gold, US indices/stocks, crude (results: `multi_results.json`). Needs the NSE CSVs in `data/idx` (not bundled) plus `data/global`.
 - `research/indicator_tests.js` + `indicator_ref.py` – indicator audit vs the `ta` library and a no-lookahead test (results: `indicator_audit.json`).
 - Slot `macro` = gold, silver, copper, crude, natgas, USD/INR, FX pairs, dollar index, global indices (Yahoo daily bars; edit with env `MACRO`).
+
+
+## AI Lab (v4)
+
+Four paper bots trade the same live 15-minute data with identical fees and risk, so they can be compared fairly, **separately for India and crypto**:
+
+| Bot | What it does |
+|---|---|
+| A Rule | EMA20/50 + ADX + RSI trend rule with ATR stops. The benchmark. |
+| B LLM-only | An LLM reads an anonymised indicator snapshot and decides; code sets size and enforces stops. |
+| C Hybrid + memory | Takes only rule signals; the LLM may veto or shrink size; reflects on each closed trade and writes market-scoped lessons. |
+| C0 Hybrid control | Same as C with memory off, to prove whether learning helps. |
+| D Telegram | Follows a public channel (`t.me/s/<channel>`) or pasted calls, scores each call conservatively on live prices. |
+
+Environment variables (set in Render -> Environment):
+
+- `LLM_API_KEY` (required for B, C, C0): OpenRouter key. Optional `LLM_BASE_URL`, `LLM_MODELS` (comma list), `LLM_DAILY_CAP`.
+- `VAULT_REPO` (`owner/name`) and `VAULT_TOKEN` (fine-grained PAT, Contents read/write on that one private repo): bot writes Obsidian-ready notes under `Bot/` and restores its state from there after restarts.
+- `TG_CHANNEL`: public channel username. Calls posted after the bot starts are tracked; old posts are ignored.
+- `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` (optional): survives restarts without waiting for the vault.
+- Tuning: `LAB_SYMS`, `LAB_RISK_PCT` (0.5), `LAB_MIN_CONF` (0.6), `LESSON_MIN_N` (20), `SAVE_MS` (120000), `VAULT_FLUSH_MIN` (15), `VAULT_STATE_MIN` (150).
+
+Notes: LLM decisions cannot be back-tested (the model may have seen the history), so only forward paper results count; expect to need about 100+ trades per bot per market before comparing. Telegram data is used only at inference time. Free Render sleeps after 15 min idle unless `SELF_URL` is set; Starter ($7/mo) is the true 24x7 option.

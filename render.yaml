@@ -6,7 +6,7 @@ services:
     healthCheckPath: /healthz
     envVars:
       - key: SLOTS
-        value: "nse,fno,instocks,gstocks,macro,india,crypto,practice"
+        value: "nse,fno,instocks,gstocks,macro,india,crypto"
       - key: LEARNING
         value: "on"
       - key: CRYPTO_FEED
@@ -23,3 +23,16 @@ services:
         sync: false
       - key: SELF_URL
         sync: false
+      # ---- AI Lab (all optional except the LLM key; set these in the Render dashboard, never in git) ----
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_BASE_URL
+        value: "https://openrouter.ai/api/v1"
+      - key: VAULT_REPO
+        sync: false
+      - key: VAULT_TOKEN
+        sync: false
+      - key: TG_CHANNEL
+        sync: false
+      - key: LAB_SYMS
+        value: "^NSEI,^NSEBANK,RELIANCE.NS,HDFCBANK.NS,BTC-USD,ETH-USD"
