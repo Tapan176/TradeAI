@@ -1,0 +1,53 @@
+'use strict';
+/* Multi-exchange crypto market data (free, no keys). One normaliser per exchange, tried in order with a sticky "last good" source per symbol,
+ * so one blocked host (Render's shared IP gets 403/451 from some exchanges) never leaves a symbol without data.
+ * candles(sym, tf) -> { candles:[{t,o,h,l,c,v}] ascending, src }   (t = bar open, unix seconds; last bar may still be forming) */
+const UA = { 'User-Agent': 'Mozilla/5.0 paperbot-lab/1.0', Accept: 'application/json' };
+async function jget(url, ms) {
+  const c = new AbortController(), t = setTimeout(() => c.abort(), ms || 10000);
+  try { const r = await fetch(url, { headers: UA, signal: c.signal }); if (!r.ok) throw new Error(url.split('/')[2] + ' HTTP ' + r.status); return await r.json(); } finally { clearTimeout(t); }
+}
+const base = sym => String(sym).replace(/-USD[T]?$/, '');
+const TFS = {
+  '5m': { cb: 300, kr: 5, okx: '5m', by: '5', bn: '5m', ku: '5min' },
+  '15m': { cb: 900, kr: 15, okx: '15m', by: '15', bn: '15m', ku: '15min' },
+  '1h': { cb: 3600, kr: 60, okx: '1H', by: '60', bn: '1h', ku: '1hour' },
+  '1d': { cb: 86400, kr: 1440, okx: '1D', by: 'D', bn: '1d', ku: '1day' }
+};
+const num = x => +x;
+const SRC = {
+  coinbase: async (sym, tf) => (await jget('https://api.exchange.coinbase.com/products/' + sym + '/candles?granularity=' + TFS[tf].cb)).slice().reverse().map(r => ({ t: r[0], o: r[3], h: r[2], l: r[1], c: r[4], v: r[5] })),
+  kraken: async (sym, tf) => {
+    const b = base(sym), pair = (b === 'BTC' ? 'XBT' : b) + 'USD', j = await jget('https://api.kraken.com/0/public/OHLC?pair=' + pair + '&interval=' + TFS[tf].kr);
+    if (j.error && j.error.length) throw new Error('kraken ' + j.error[0]); const k = Object.keys(j.result).find(x => x !== 'last');
+    return j.result[k].map(r => ({ t: +r[0], o: num(r[1]), h: num(r[2]), l: num(r[3]), c: num(r[4]), v: num(r[6]) }));
+  },
+  okx: async (sym, tf) => { const j = await jget('https://www.okx.com/api/v5/market/candles?instId=' + base(sym) + '-USDT&bar=' + TFS[tf].okx + '&limit=300'); if (j.code !== '0') throw new Error('okx ' + j.msg); return j.data.slice().reverse().map(r => ({ t: Math.floor(r[0] / 1000), o: num(r[1]), h: num(r[2]), l: num(r[3]), c: num(r[4]), v: num(r[5]) })); },
+  bybit: async (sym, tf) => { const j = await jget('https://api.bybit.com/v5/market/kline?category=spot&symbol=' + base(sym) + 'USDT&interval=' + TFS[tf].by + '&limit=200'); if (j.retCode !== 0) throw new Error('bybit ' + j.retMsg); return j.result.list.slice().reverse().map(r => ({ t: Math.floor(r[0] / 1000), o: num(r[1]), h: num(r[2]), l: num(r[3]), c: num(r[4]), v: num(r[5]) })); },
+  binance: async (sym, tf) => (await jget('https://data-api.binance.vision/api/v3/klines?symbol=' + base(sym) + 'USDT&interval=' + TFS[tf].bn + '&limit=500')).map(r => ({ t: Math.floor(r[0] / 1000), o: num(r[1]), h: num(r[2]), l: num(r[3]), c: num(r[4]), v: num(r[5]) })),
+  kucoin: async (sym, tf) => { const j = await jget('https://api.kucoin.com/api/v1/market/candles?type=' + TFS[tf].ku + '&symbol=' + base(sym) + '-USDT'); if (j.code !== '200000') throw new Error('kucoin ' + j.msg); return j.data.slice().reverse().map(r => ({ t: +r[0], o: num(r[1]), h: num(r[3]), l: num(r[4]), c: num(r[2]), v: num(r[5]) })); }
+};
+const ORDER = (process.env.CRYPTO_SOURCES || 'coinbase,kraken,okx,bybit,binance,kucoin').split(',').map(s => s.trim()).filter(s => SRC[s]);
+const sticky = {}, health = {};   // sticky[sym] = last good source; health[src] = {ok, fail, last, lastErr, ms}
+function note(src, ok, err, ms) { const h = health[src] || (health[src] = { ok: 0, fail: 0 }); if (ok) { h.ok++; h.lastOk = Date.now(); h.ms = ms; } else { h.fail++; h.lastFail = Date.now(); h.lastErr = String(err).slice(0, 120); } }
+
+/* try one source, validate the result */
+async function from(src, sym, tf) {
+  const t0 = Date.now();
+  try { const cs = await SRC[src](sym, tf); if (!cs || cs.length < 30) throw new Error('too few candles (' + (cs ? cs.length : 0) + ')'); note(src, true, null, Date.now() - t0); return cs; }
+  catch (e) { note(src, false, e.message); throw e; }
+}
+async function candles(sym, tf) {
+  tf = TFS[tf] ? tf : '15m';
+  const order = sticky[sym] ? [sticky[sym]].concat(ORDER.filter(s => s !== sticky[sym])) : ORDER, errs = [];
+  for (const s of order) { try { const cs = await from(s, sym, tf); sticky[sym] = s; return { candles: cs, src: s }; } catch (e) { errs.push(s + ': ' + e.message); } }
+  throw new Error('all crypto feeds failed for ' + sym + ' (' + errs.join('; ') + ')');
+}
+/* one exchange only (for the main crypto slot, which keeps a single consistent feed) */
+async function fromSource(src, sym, tf) { if (!SRC[src]) throw new Error('unknown crypto source ' + src); return from(src, sym, tf || '15m'); }
+/* diagnostics: hit every source once for BTC so /api/feeds shows which exchanges Render's IP can actually reach */
+async function probe(sym) {
+  const out = {}; await Promise.all(Object.keys(SRC).map(async s => { const t0 = Date.now(); try { const cs = await from(s, sym || 'BTC-USD', '15m'); out[s] = { ok: true, ms: Date.now() - t0, bars: cs.length, last: cs[cs.length - 1].c }; } catch (e) { out[s] = { ok: false, err: e.message.slice(0, 100) }; } })); return out;
+}
+const status = () => ({ order: ORDER, sticky, health });
+module.exports = { candles, fromSource, probe, status, sources: Object.keys(SRC) };

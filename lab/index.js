@@ -9,7 +9,7 @@
 const D = require('./data.js'), P = require('./paper.js'), LLM = require('./llm.js'), V = require('./vault.js'), TG = require('./tg.js');
 const S = (() => { try { return require('../signals.js'); } catch (e) { return require('../../signals.js'); } })();
 const E = process.env, FNO = (() => { try { return require('../fno.js'); } catch (e) { try { return require('../../fno.js'); } catch (e2) { return null; } } })();
-const SYMS = (E.LAB_SYMS || '^NSEI,^NSEBANK,RELIANCE.NS,HDFCBANK.NS,BTC-USD,ETH-USD').split(',').map(s => s.trim()).filter(Boolean);
+const SYMS = (E.LAB_SYMS || '^NSEI,^NSEBANK,RELIANCE.NS,HDFCBANK.NS,BTC-USD,ETH-USD,SOL-USD,XRP-USD').split(',').map(s => s.trim()).filter(Boolean);
 const EXTRA = (E.CHART_SYMS || 'GC=F,SI=F,CL=F,INR=X,^GSPC,^IXIC,^N225,^INDIAVIX').split(',').map(s => s.trim()).filter(Boolean);
 const POLL = +E.LAB_POLL_MS || 60000, MIN_CONF = +E.LAB_MIN_CONF || 0.6, STOP_ATR = +E.LAB_STOP_ATR || 1.5, TGT_ATR = +E.LAB_TARGET_ATR || 2.5, NOENTRY_MIN = +E.LAB_NO_ENTRY_MIN || 30, MAXHOLD = +E.LAB_MAX_HOLD_BARS || 48;
 const MAX_COST_R = +E.LAB_MAX_COST_R || 0;   // 0 = off. Skip entries whose round-trip cost exceeds this many R (backtests show costs, not signals, are what lose money on 15m bars)

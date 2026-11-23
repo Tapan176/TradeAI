@@ -33,6 +33,7 @@ const UA = { 'User-Agent': 'Mozilla/5.0 paperbot/3.0', Accept: 'application/json
 
 const IN_SYMS = { NIFTYBEES: 'NIFTYBEES.NS', JUNIORBEES: 'JUNIORBEES.NS', BANKBEES: 'BANKBEES.NS', ITBEES: 'ITBEES.NS', PSUBNKBEES: 'PSUBNKBEES.NS', GOLDBEES: 'GOLDBEES.NS' };
 const CRYPTO = ['BTC-USD', 'ETH-USD', 'SOL-USD'];
+const CF = require('./lab/cryptofeeds.js');
 const KRAKEN = { 'BTC-USD': 'XBTUSD', 'ETH-USD': 'ETHUSD', 'SOL-USD': 'SOLUSD' };
 const NSE_HDR = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36', Accept: 'application/json, text/plain, */*', 'Accept-Language': 'en-US,en;q=0.9' };
 let NSE_IDS = new Set();
@@ -175,6 +176,12 @@ const feeds = {
     for (const p of CRYPTO) { const rows = await jget(`https://api.exchange.coinbase.com/products/${p}/candles?granularity=${GRAN}`); out[p] = rows.slice().reverse().map(r => ({ o: r[3], h: r[2], l: r[1], c: r[4] })); }
     return out;
   },
+  async _ex(src) { const out = {}; for (const p of CRYPTO) { const cs = await CF.fromSource(src, p, GRAN === 900 ? '15m' : GRAN === 300 ? '5m' : GRAN === 3600 ? '1h' : '15m'); out[p] = cs.map(r => ({ o: r.o, h: r.h, l: r.l, c: r.c })); } return out; },
+  async _exPrices(src) { const o = {}; await Promise.all(CRYPTO.map(async p => { const cs = await CF.fromSource(src, p, '5m'); o[p] = cs[cs.length - 1].c; })); return o; },
+  async okxHistory() { return this._ex('okx'); }, async okxPrices() { return this._exPrices('okx'); },
+  async bybitHistory() { return this._ex('bybit'); }, async bybitPrices() { return this._exPrices('bybit'); },
+  async binanceHistory() { return this._ex('binance'); }, async binancePrices() { return this._exPrices('binance'); },
+  async kucoinHistory() { return this._ex('kucoin'); }, async kucoinPrices() { return this._exPrices('kucoin'); },
   async coinbasePrices() { const o = {}; await Promise.all(CRYPTO.map(async p => { o[p] = +(await jget(`https://api.exchange.coinbase.com/products/${p}/ticker`)).price; })); return o; },
   async krakenHistory() {
     const out = {}, iv = Math.max(1, Math.round(GRAN / 60));
@@ -350,7 +357,7 @@ async function tickStocks(sl) {
 async function initCrypto(sl, fresh) {
   const saved = fresh ? null : await restore('crypto');
   if (saved && saved.v === 2) { sl.bot = PB.restoreBot(saved); sl.bot.state.cfg.adaptive = LEARN; sl.feed = saved.feed && saved.feed.name || 'sim'; return; }
-  const order = CRYPTO_FEED === 'sim' ? [] : CRYPTO_FEED === 'auto' ? ['coinbase', 'kraken'] : [CRYPTO_FEED];
+  const order = CRYPTO_FEED === 'sim' ? [] : CRYPTO_FEED === 'auto' ? ['coinbase', 'kraken', 'okx', 'bybit', 'binance', 'kucoin'] : [CRYPTO_FEED];
   for (const f of order) {
     try {
       const hist = await feeds[f + 'History']();
@@ -367,7 +374,10 @@ async function initCrypto(sl, fresh) {
 async function tickCrypto(sl) {
   const b = sl.bot;
   if (b.state.feed.mode !== 'live') { b.step(Math.max(1, Math.round(POLL / 2000))); return; }
-  const px = sl.feed === 'kraken' ? await feeds.krakenPrices() : await feeds.coinbasePrices();
+  let px; try { px = await feeds[sl.feed + 'Prices'](); } catch (e0) {
+    for (const f of ['coinbase', 'kraken', 'okx', 'bybit', 'binance', 'kucoin'].filter(x => x !== sl.feed)) { try { px = await feeds[f + 'Prices'](); b.state.feed.note = 'live ' + f + ' (failover from ' + sl.feed + ': ' + e0.message.slice(0, 60) + ')'; sl.feed = f; b.state.feed.name = f; break; } catch (e) { /* next */ } }
+    if (!px) throw e0;
+  }
   const bucket = Math.floor(Date.now() / 1000 / GRAN), nc = !!sl.lastBucket && bucket > sl.lastBucket; sl.lastBucket = bucket;
   b.step(1, { prices: px, newCandle: nc }); sl.lastPollOk = Date.now(); sl.failStreak = 0;
 }
@@ -571,7 +581,8 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/backtest') return send(200, { status: BT.status(), result: BT.result(url.searchParams.get('full') === '1') });
   if (req.method === 'POST' && url.pathname === '/api/backtest/run') { if (TOKEN && !authed(req, url)) return send(401, { error: 'missing/invalid ADMIN_TOKEN' }); if (!BT.status().running) BT.run({ days: +url.searchParams.get('days') || 58 }); return send(202, BT.status()); }
-  if (url.pathname === '/api/feeds') return send(200, { yahoo: LABD.ygStatus(), upstox: UPX.status(), indexSource: feeds._idxSrc || null, indexMissing: feeds._idxMissing || [], chainError: feeds._chainErr || null, slots: summary() });
+  if (url.pathname === '/api/feeds') return send(200, { yahoo: LABD.ygStatus(), upstox: UPX.status(), indexSource: feeds._idxSrc || null, crypto: CF.status(), indexMissing: feeds._idxMissing || [], chainError: feeds._chainErr || null, slots: summary() });
+  if (url.pathname === '/api/crypto-probe') return send(200, { probe: await CF.probe(url.searchParams.get('sym') || 'BTC-USD'), status: CF.status() });
   if (url.pathname === '/api/lab') return send(200, LAB.snapshot());
   if (url.pathname === '/api/lab/symbols') return send(200, LAB.chartSymbols());
   if (url.pathname === '/api/lab/prices') { try { return send(200, await LAB.prices()); } catch (e) { return send(502, { error: e.message }); } }

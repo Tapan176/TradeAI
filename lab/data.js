@@ -2,6 +2,7 @@
 /* Market-data bus for the AI Lab and the Charts tab: intraday OHLC with REAL timestamps.
  * Yahoo Finance chart API (NSE indices/stocks, commodities, FX, global indices) + Coinbase (Kraken fallback) for crypto. Free, no keys. */
 const UPX = require('./upstox.js');
+const CF = require('./cryptofeeds.js');
 const UA = { 'User-Agent': 'Mozilla/5.0 paperbot-lab/1.0', Accept: 'application/json' };
 const YH = 'https://query1.finance.yahoo.com/v8/finance/chart/';
 async function jget(url, ms) {
@@ -10,7 +11,7 @@ async function jget(url, ms) {
 }
 const TF = { '5m': { y: '5m', r: '5d', cb: 300, ks: 5, s: 300 }, '15m': { y: '15m', r: '10d', cb: 900, ks: 15, s: 900 }, '1h': { y: '60m', r: '1mo', cb: 3600, ks: 60, s: 3600 }, '1d': { y: '1d', r: '1y', cb: 86400, ks: 1440, s: 86400 } };
 const KRAKEN = { 'BTC-USD': 'XBTUSD', 'ETH-USD': 'ETHUSD', 'SOL-USD': 'SOLUSD', 'XRP-USD': 'XRPUSD', 'DOGE-USD': 'DOGEUSD' };
-const NAMES = { '^NSEI': 'NIFTY 50', '^NSEBANK': 'BANK NIFTY', '^BSESN': 'SENSEX', '^CNXIT': 'NIFTY IT', 'BTC-USD': 'Bitcoin', 'ETH-USD': 'Ethereum', 'SOL-USD': 'Solana', 'GC=F': 'Gold', 'SI=F': 'Silver', 'HG=F': 'Copper', 'CL=F': 'WTI crude', 'BZ=F': 'Brent crude', 'NG=F': 'Natural gas', 'INR=X': 'USD/INR', 'EURUSD=X': 'EUR/USD', 'GBPUSD=X': 'GBP/USD', 'USDJPY=X': 'USD/JPY', 'DX-Y.NYB': 'Dollar index', '^GSPC': 'S&P 500', '^IXIC': 'Nasdaq', '^DJI': 'Dow Jones', '^N225': 'Nikkei 225', '^FTSE': 'FTSE 100', '^GDAXI': 'DAX', '^HSI': 'Hang Seng', 'GOLDBEES.NS': 'Gold BeES' };
+const NAMES = { '^NSEI': 'NIFTY 50', '^NSEBANK': 'BANK NIFTY', '^BSESN': 'SENSEX', '^CNXIT': 'NIFTY IT', 'BTC-USD': 'Bitcoin', 'ETH-USD': 'Ethereum', 'SOL-USD': 'Solana', 'XRP-USD': 'XRP', 'DOGE-USD': 'Dogecoin', 'ADA-USD': 'Cardano', 'AVAX-USD': 'Avalanche', 'LINK-USD': 'Chainlink', 'GC=F': 'Gold', 'SI=F': 'Silver', 'HG=F': 'Copper', 'CL=F': 'WTI crude', 'BZ=F': 'Brent crude', 'NG=F': 'Natural gas', 'INR=X': 'USD/INR', 'EURUSD=X': 'EUR/USD', 'GBPUSD=X': 'GBP/USD', 'USDJPY=X': 'USD/JPY', 'DX-Y.NYB': 'Dollar index', '^GSPC': 'S&P 500', '^IXIC': 'Nasdaq', '^DJI': 'Dow Jones', '^N225': 'Nikkei 225', '^FTSE': 'FTSE 100', '^GDAXI': 'DAX', '^HSI': 'Hang Seng', 'GOLDBEES.NS': 'Gold BeES' };
 
 /* instrument metadata: which book/session an instrument trades in */
 function inst(sym) {
@@ -104,7 +105,7 @@ async function candles(sym, tf, ttlMs) {
   tf = TF[tf] ? tf : '15m'; const m = inst(sym);
   return cached(sym + '|' + tf, ttlMs == null ? 25000 : ttlMs, async () => {
     let r, src = m.src;
-    if (m.src === 'coinbase') { try { r = await coinbaseCandles(sym, tf); } catch (e) { r = await krakenCandles(sym, tf); src = 'kraken'; } }
+    if (m.src === 'coinbase') { try { const x = await CF.candles(sym, tf); r = { candles: x.candles, meta: {} }; src = x.src; } catch (e) { r = await yahooCandles(sym, tf); src = 'yahoo'; } }
     else if (m.book === 'IN' && UPX.configured() && UPX.keyFor(sym)) { try { const cs = await upxRecent(sym, tf); if (cs.length < 20) throw new Error('too few Upstox candles'); r = { candles: cs, meta: {} }; src = 'upstox'; } catch (e) { UPXERR = e.message; r = await yahooCandles(sym, tf); src = 'yahoo'; } }
     else r = await yahooCandles(sym, tf);
     return { candles: r.candles, meta: r.meta, src, tf };

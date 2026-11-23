@@ -11,7 +11,7 @@
 const D = require('./data.js'), P = require('./paper.js'), UPX = require('./upstox.js');
 const S = (() => { try { return require('../signals.js'); } catch (e) { return require('../../signals.js'); } })();
 const E = process.env;
-const SYMS = { IN: (E.BT_SYMS_IN || '^NSEI,^NSEBANK,RELIANCE.NS,HDFCBANK.NS').split(',').map(s => s.trim()).filter(Boolean), CRYPTO: (E.BT_SYMS_CRYPTO || 'BTC-USD,ETH-USD').split(',').map(s => s.trim()).filter(Boolean) };
+const SYMS = { IN: (E.BT_SYMS_IN || '^NSEI,^NSEBANK,RELIANCE.NS,HDFCBANK.NS').split(',').map(s => s.trim()).filter(Boolean), CRYPTO: (E.BT_SYMS_CRYPTO || 'BTC-USD,ETH-USD,SOL-USD,XRP-USD').split(',').map(s => s.trim()).filter(Boolean) };
 const FEE = P.CFG.feeBps, SLIP = P.CFG.slipBps;
 const r2 = P.r2, r3 = x => Math.round(x * 1000) / 1000;
 const tick = () => new Promise(r => setImmediate(r));
