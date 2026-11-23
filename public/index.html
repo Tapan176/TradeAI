@@ -19,7 +19,7 @@ html{overflow-y:scroll;scrollbar-gutter:stable}
 header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0 8px}
 h1{font-size:17px;margin:0;font-weight:650;letter-spacing:.2px}
 .sub{color:var(--ink2);font-size:12px}
-.badge{display:inline-block;font-size:10.5px;font-weight:650;letter-spacing:.4px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);background:var(--chip);color:var(--ink)}
+.badge{white-space:nowrap;display:inline-block;font-size:10.5px;font-weight:650;letter-spacing:.4px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);background:var(--chip);color:var(--ink)}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:baseline;background:var(--mut)}
 .dot.on{background:var(--good)}.dot.warn{background:var(--warn)}.dot.crit{background:var(--crit)}
 .ctrl{display:block;margin:4px 0 8px}.ctrl .r1{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-bottom:6px}.ctrl .r2{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.ctrl .r1::-webkit-scrollbar{display:none}.ctrl button{white-space:nowrap;min-height:32px;padding:5px 10px;font-size:13px}.ctrl .seg{flex:0 0 auto}.ctrl>button{flex:0 0 auto}#banner{font-size:11.5px;color:var(--mut)}#status{font-size:12.5px}
@@ -100,7 +100,7 @@ footer{color:var(--mut);font-size:11.5px;margin-top:18px;text-align:center}
       <h1>PaperBot <span class="mut" style="font-weight:400">· adaptive</span></h1>
       <div class="sub" id="status">starting…</div>
     </div>
-    <div style="text-align:right"><span class="badge" id="badge">PAPER MONEY</span><div style="margin-top:6px"><button id="theme" title="Theme" style="padding:3px 9px;min-height:28px">◐</button></div></div>
+    <div style="text-align:right"><span class="badge" id="badge">PAPER MONEY</span><div style="margin-top:6px"><button id="theme" title="Theme" style="padding:3px 9px;min-height:28px">◐</button> <button id="install" title="Install as an app" style="padding:3px 9px;min-height:28px;display:none;white-space:nowrap">Install</button></div></div>
   </header>
   <div class="tabs" id="tabs"></div>
   <div class="note" id="banner" style="margin:6px 0 6px"></div>
@@ -1112,6 +1112,13 @@ window.addEventListener('scroll',ttHide,{passive:true});
   renderTabs();
   setInterval(function(){if(ui.tab==='home'||ui.tab==='bt'){var a=document.activeElement;if(a&&/SELECT|INPUT/.test(a.tagName))return;proTab()}},4000);
 })();
+
+/* ---- install-as-app button (Android Chrome / Edge / desktop Chrome fire beforeinstallprompt) ---- */
+(function(){var ip=null,b=function(){return document.getElementById('install')};
+window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();ip=e;var x=b();if(x)x.style.display=''});
+window.addEventListener('appinstalled',function(){ip=null;var x=b();if(x)x.style.display='none'});
+document.addEventListener('click',function(e){var x=e.target&&e.target.id==='install';if(!x||!ip)return;ip.prompt();ip.userChoice&&ip.userChoice.then(function(){ip=null;var y=b();if(y)y.style.display='none'})});
+if(window.matchMedia&&matchMedia('(display-mode: standalone)').matches){var x=b();if(x)x.style.display='none'}})();
 
 renderTabs();renderCtrl();
 if(SERVER)startServer();else startLocal();
