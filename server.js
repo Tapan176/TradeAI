@@ -363,7 +363,7 @@ async function initCrypto(sl, fresh) {
       const hist = await feeds[f + 'History']();
       if (CRYPTO.every(p => hist[p] && hist[p].length >= 100)) {
         const cfg = { startBalance: +process.env.START_BALANCE_CRYPTO || 20, adaptive: LEARN, symbols: CRYPTO.map(id => ({ id, price: 1, vol: 0.002 })) };
-        sl.bot = PB.createBot({ cfg, history: hist }); sl.feed = f;
+        sl.bot = PB.createBot({ cfg, history: hist }); sl.feed = f; sl.kick = true;
         sl.bot.state.feed = { mode: 'live', name: f, note: 'live ' + f + ' · ' + GRAN / 60 + 'm candles' }; return;
       }
     } catch (e) { sl.note = f + ' unavailable: ' + e.message; }
@@ -378,7 +378,7 @@ async function tickCrypto(sl) {
     for (const f of ['coinbase', 'kraken', 'okx', 'bybit', 'binance', 'kucoin'].filter(x => x !== sl.feed)) { try { px = await feeds[f + 'Prices'](); b.state.feed.note = 'live ' + f + ' (failover from ' + sl.feed + ': ' + e0.message.slice(0, 60) + ')'; sl.feed = f; b.state.feed.name = f; break; } catch (e) { /* next */ } }
     if (!px) throw e0;
   }
-  const bucket = Math.floor(Date.now() / 1000 / GRAN), nc = !!sl.lastBucket && bucket > sl.lastBucket; sl.lastBucket = bucket;
+  const bucket = Math.floor(Date.now() / 1000 / GRAN), nc = (!!sl.lastBucket && bucket > sl.lastBucket) || !!sl.kick; sl.kick = false; sl.lastBucket = bucket;
   b.step(1, { prices: px, newCandle: nc }); sl.lastPollOk = Date.now(); sl.failStreak = 0;
 }
 
@@ -631,6 +631,7 @@ async function saveAll() { for (const n of Object.keys(slots)) { const s = slots
   for (const n of order) setInterval(() => loop(slots[n]), n === 'practice' ? Math.max(2000, POLL / 2) : (n === 'nse' || n === 'fno') ? (+process.env.NSE_POLL_MS || 30000) : (n === 'instocks' || n === 'gstocks' || n === 'macro') ? (+process.env.STOCKS_POLL_MS || 300000) : POLL);
   setInterval(saveAll, +process.env.SAVE_MS || 120000);
   setInterval(() => vaultStates(), (+process.env.VAULT_STATE_MIN || 150) * 60000);
+  setTimeout(() => vaultStates('First slot snapshot after boot'), (+process.env.VAULT_FIRST_MIN || 20) * 60000);
   if (process.env.UPSTOX_TOKEN) { const ld = () => UPX.loadInstruments().then(ok => { if (!ok) setTimeout(ld, 120000); }); ld(); setInterval(ld, 12 * 3600e3); }
   LAB.start({ store: { save: persist, load: restore } }).catch(e => console.error('lab start', e.message));
   if ((process.env.BACKTEST || 'on') !== 'off') { setTimeout(() => BT.run(), +process.env.BT_FIRST_MS || 150000); setInterval(() => BT.run(), (+process.env.BT_EVERY_H || 12) * 3600e3); }
