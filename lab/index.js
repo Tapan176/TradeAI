@@ -157,13 +157,13 @@ async function runTask(t) {
     openFor('B', t.sym, meta, side, scan[t.sym].f || f, (d.action + ' ' + conf.toFixed(2) + ' · bull: ' + (d.bull_case || '') + ' · bear: ' + (d.bear_case || '') + ' · invalid: ' + (d.invalidation || '')).slice(0, 300), { model: r.model, stopAtr: clamp(d.stop_atr, 0.8, 3), targetAtr: clamp(d.target_atr, 1, 5), conf });
   } else if (t.kind === 'manageB') {
     const p = st.bots.B.pos.find(x => x.sym === t.sym); if (!p) return; const f = scan[t.sym].f || t.f, rNow = (p.side * (mem.px[t.sym] - p.entry) * p.qty) / p.riskAmt;
-    const r = await LLM.call('B', [{ role: 'system', content: SYS_M }, { role: 'user', content: usr(Object.assign(snapOf(t.meta, f), { position: { side: p.side > 0 ? 'long' : 'short', r_multiple_now: r2(rNow), bars_held: Math.round((now() - p.openT) / TFS), stop_distance_atr: r2(Math.abs(p.entry - p.stop) / f.atr) } })) }], { validate: vM, maxTokens: 250 });
+    const r = await LLM.call('B', [{ role: 'system', content: SYS_M }, { role: 'user', content: usr(Object.assign(snapOf(t.meta, f), { position: { side: p.side > 0 ? 'long' : 'short', r_multiple_now: r2(rNow), bars_held: Math.round((now() - p.openT) / TFS), stop_distance_atr: r2(Math.abs(p.entry - p.stop) / f.atr) } })) }], { validate: vM, maxTokens: 350 });
     if (!r.ok) return; const d = r.data; logDec('B', t.sym, 'manage', d.action + ' ' + r2(+d.confidence) + ' · ' + (d.reason || ''), { model: r.model });
     if (d.action === 'close' && +d.confidence >= MIN_CONF) closeFor('B', p, mem.px[t.sym], 'LLM exit'); else if (d.action === 'breakeven' && rNow >= 0.5 && ((p.side > 0 && p.entry > p.stop) || (p.side < 0 && p.entry < p.stop))) { p.stop = p.entry; }
   } else if (t.kind === 'review') {
     if (st.bots[bid].pos.some(p => p.sym === t.sym)) return; if (Date.now() - t.created > 2 * TFS * 1000) { st.bots[bid].stats.skipped++; return; }
     const f = t.f, side = t.side, sideTxt = side > 0 ? 'long' : 'short'; const matched = bid === 'C' ? st.lessons.filter(L => L.status === 'active' && matches(L.cond, f, sideTxt, t.meta.book)).slice(0, 3) : [];
-    const r = await LLM.call(bid, [{ role: 'system', content: SYS_C }, { role: 'user', content: usr(Object.assign(snapOf(t.meta, f), { rule_bot_proposal: { side: sideTxt, stop_atr: STOP_ATR, target_atr: TGT_ATR }, risk_per_trade_pct: P.CFG.riskPct * 100 }, bid === 'C' && matched.length ? { relevant_lessons: matched.map(L => L.claim) } : {})) }], { validate: vC, maxTokens: 250 });
+    const r = await LLM.call(bid, [{ role: 'system', content: SYS_C }, { role: 'user', content: usr(Object.assign(snapOf(t.meta, f), { rule_bot_proposal: { side: sideTxt, stop_atr: STOP_ATR, target_atr: TGT_ATR }, risk_per_trade_pct: P.CFG.riskPct * 100 }, bid === 'C' && matched.length ? { relevant_lessons: matched.map(L => L.claim) } : {})) }], { validate: vC, maxTokens: 400 });
     if (!r.ok) { st.bots[bid].stats.unreviewed++; logDec(bid, t.sym, 'llm-fail', r.error); return; }
     const d = r.data; logDec(bid, t.sym, 'review', d.decision + ' x' + r2(+d.size_mult) + ' · ' + (d.reason || ''), { model: r.model });
     if (d.decision === 'veto') { st.bots[bid].stats.vetoed++; return; }

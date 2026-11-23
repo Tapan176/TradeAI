@@ -34,16 +34,22 @@ async function run(bot, messages, opt) {
   if (!KEY) return { ok: false, error: 'no LLM key' };
   const gap = 60000 / RPM - (Date.now() - st.lastCallAt); if (gap > 0) await new Promise(r => setTimeout(r, gap));
   st.lastCallAt = Date.now(); st.calls++; st.by[bot] = (st.by[bot] || 0) + 1;
-  const body = { messages, temperature: opt.temperature == null ? 0.1 : opt.temperature, max_tokens: opt.maxTokens || 700, response_format: { type: 'json_object' } };
-  if (IS_OR) { body.models = MODELS.slice(0, 3); body.model = MODELS[0]; } else body.model = MODELS[0];
+  const mk = (maxTok, model) => { const b = { messages, temperature: opt.temperature == null ? 0.1 : opt.temperature, max_tokens: maxTok, response_format: { type: 'json_object' } }; if (IS_OR) { b.models = MODELS.slice(0, 3); b.model = model || MODELS[0]; } else b.model = model || MODELS[0]; return b; };
   const c = new AbortController(), to = setTimeout(() => c.abort(), TIMEOUT);
   try {
-    const r = await fetch(BASE + '/chat/completions', { method: 'POST', headers: { Authorization: 'Bearer ' + KEY, 'Content-Type': 'application/json', 'HTTP-Referer': E.SELF_URL || 'https://paperbot.local', 'X-Title': 'PaperBot Lab' }, body: JSON.stringify(body), signal: c.signal });
-    if (r.status === 429 || r.status === 402) { const ra = +r.headers.get('retry-after') || 60; st.penaltyUntil = Date.now() + Math.min(ra, 900) * 1000; throw new Error('HTTP ' + r.status + ' (backing off ' + ra + 's)'); }
-    const txt = await r.text(); let j; try { j = JSON.parse(txt); } catch (e) { throw new Error('HTTP ' + r.status + ' non-JSON reply'); }
-    if (!r.ok || j.error) throw new Error('HTTP ' + r.status + ' ' + String((j.error && (j.error.message || j.error)) || '').slice(0, 160));
-    const m = j.choices && j.choices[0] && j.choices[0].message, content = m && (m.content || '');
-    const data = extractJson(content); if (!data) throw new Error('reply was not valid JSON');
+    let j, data = null, why = '', body = mk(opt.maxTokens || 700);
+    for (let attempt = 0; attempt < 2 && !data; attempt++) {
+      // 2nd attempt (only when the 1st reply was not usable JSON): double the token budget and prefer the next model in the list
+      if (attempt) { st.calls++; st.by[bot] = (st.by[bot] || 0) + 1; body = mk(Math.min(1600, (opt.maxTokens || 700) * 2), MODELS[1] || MODELS[0]); }
+      const r = await fetch(BASE + '/chat/completions', { method: 'POST', headers: { Authorization: 'Bearer ' + KEY, 'Content-Type': 'application/json', 'HTTP-Referer': E.SELF_URL || 'https://paperbot.local', 'X-Title': 'PaperBot Lab' }, body: JSON.stringify(body), signal: c.signal });
+      if (r.status === 429 || r.status === 402) { const ra = +r.headers.get('retry-after') || 60; st.penaltyUntil = Date.now() + Math.min(ra, 900) * 1000; throw new Error('HTTP ' + r.status + ' (backing off ' + ra + 's)'); }
+      const txt = await r.text(); try { j = JSON.parse(txt); } catch (e) { throw new Error('HTTP ' + r.status + ' non-JSON reply'); }
+      if (!r.ok || j.error) throw new Error('HTTP ' + r.status + ' ' + String((j.error && (j.error.message || j.error)) || '').slice(0, 160));
+      const ch = j.choices && j.choices[0], m = ch && ch.message, content = m && (m.content || '');
+      data = extractJson(content) || extractJson(m && (m.reasoning || m.reasoning_content));
+      if (!data) why = 'reply was not valid JSON (' + (j.model || body.model) + ', finish=' + (ch && ch.finish_reason) + ', ' + String(content || '').length + ' chars' + (content ? ': ' + String(content).replace(/\s+/g, ' ').slice(0, 70) : '') + ')';
+    }
+    if (!data) throw new Error(why);
     if (opt.validate) { const bad = opt.validate(data); if (bad) throw new Error('schema: ' + bad); }
     st.ok++; st.models[j.model || body.model] = (st.models[j.model || body.model] || 0) + 1; st.tokens += (j.usage && j.usage.total_tokens) || 0;
     st.last = { at: Date.now(), bot, model: j.model || body.model, ms: Date.now() - t0 };
