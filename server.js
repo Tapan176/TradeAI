@@ -39,7 +39,9 @@ let NSE_IDS = new Set();
 const YH = 'https://query1.finance.yahoo.com/v8/finance/chart/';
 
 /* ---------- helpers ---------- */
+const LABD = require('./lab/data.js'), BT = require('./lab/backtest.js'), UPX = require('./lab/upstox.js');
 async function jget(url, ms) {
+  if (url.indexOf('finance.yahoo.com') > 0) return LABD.ygate(url, { ttl: /range=(2y|1y|5y|max)/.test(url) ? 6 * 3600e3 : /range=1d&/.test(url) ? 45000 : 30000, pri: 1, ms: Math.max(ms || 0, 15000) });   // one paced, cached, 429-aware queue for the whole process
   const c = new AbortController(); const t = setTimeout(() => c.abort(), ms || 9000);
   try { const r = await fetch(url, { headers: UA, signal: c.signal }); if (!r.ok) throw new Error(url.split('/')[2] + ' HTTP ' + r.status); return await r.json(); }
   finally { clearTimeout(t); }
@@ -109,6 +111,9 @@ const feeds = {
   /* NSE public index feed (free, no key): https://www.nseindia.in/api/allIndices — all NSE indices, live intraday `last` + previousClose.
      NSE wants a browser-like UA + session cookie from the home page; we bootstrap one and retry the other host on failure. */
   async nseIndices() {
+    if (UPX.configured()) { try { const q = await UPX.indices(Array.from(NSE_IDS)); feeds._idxSrc = 'upstox'; feeds._idxMissing = q.missing || [];
+        if (q.missing && q.missing.length) { const R = loadReplay(), n = R ? R.dates.length : 0; q.missing.forEach(id => { const v = R && R.C[id] ? R.C[id][n - 1] : 0; if (v > 0) { q.px[id] = v; q.prev[id] = v; } }); }   // no live quote for this index: hold its last replay close (flat) so the slot still runs
+        return q; } catch (e) { feeds._idxSrc = 'nse (upstox failed: ' + e.message + ')'; } }   // NSE blocks Render's IPs (HTTP 403); Upstox is the reliable free source
     const hosts = ['https://www.nseindia.in', 'https://www.nseindia.com'];
     let lastErr;
     for (const h of hosts) {
@@ -141,6 +146,7 @@ const feeds = {
 
   /* NSE option chain (best effort, free): /api/option-chain-indices?symbol=NIFTY. Falls back to MODELED prices when blocked. */
   async nseChain(sym) {
+    if (UPX.configured()) { try { return await UPX.chain(sym); } catch (e) { feeds._chainErr = e.message; } }
     const h = feeds._nseHost || 'https://www.nseindia.in';
     if (!feeds._nseCookie) await feeds.nseIndices();   // bootstraps cookie
     const c = new AbortController(), t = setTimeout(() => c.abort(), 15000);
@@ -563,6 +569,9 @@ const server = http.createServer(async (req, res) => {
     return send(200, { istNow: istNow(), feeds: r });
   }
 
+  if (url.pathname === '/api/backtest') return send(200, { status: BT.status(), result: BT.result(url.searchParams.get('full') === '1') });
+  if (req.method === 'POST' && url.pathname === '/api/backtest/run') { if (TOKEN && !authed(req, url)) return send(401, { error: 'missing/invalid ADMIN_TOKEN' }); if (!BT.status().running) BT.run({ days: +url.searchParams.get('days') || 58 }); return send(202, BT.status()); }
+  if (url.pathname === '/api/feeds') return send(200, { yahoo: LABD.ygStatus(), upstox: UPX.status(), indexSource: feeds._idxSrc || null, indexMissing: feeds._idxMissing || [], chainError: feeds._chainErr || null, slots: summary() });
   if (url.pathname === '/api/lab') return send(200, LAB.snapshot());
   if (url.pathname === '/api/lab/symbols') return send(200, LAB.chartSymbols());
   if (url.pathname === '/api/lab/prices') { try { return send(200, await LAB.prices()); } catch (e) { return send(502, { error: e.message }); } }
@@ -603,6 +612,7 @@ async function saveAll() { for (const n of Object.keys(slots)) { const s = slots
 (async () => {
   server.listen(PORT, () => console.log('listening on', PORT, '· slots:', WANT.join(',')));
   // practice first so india can be warm-started from it
+  if (process.env.UPSTOX_TOKEN) { try { await Promise.race([UPX.loadInstruments(), new Promise(r => setTimeout(r, 20000))]); } catch (e) { /* retried in background */ } }
   const order = ['practice', 'nse', 'fno', 'instocks', 'gstocks', 'macro', 'india', 'crypto'].filter(n => WANT.includes(n));
   order.forEach(n => mkSlot(n));
   for (const n of order.filter(x => x === 'practice')) { try { await DEFS[n].init(slots[n], false); } catch (e) { console.error('init', n, e.message); slots[n].note = e.message; } }
@@ -610,7 +620,9 @@ async function saveAll() { for (const n of Object.keys(slots)) { const s = slots
   for (const n of order) setInterval(() => loop(slots[n]), n === 'practice' ? Math.max(2000, POLL / 2) : (n === 'nse' || n === 'fno') ? (+process.env.NSE_POLL_MS || 30000) : (n === 'instocks' || n === 'gstocks' || n === 'macro') ? (+process.env.STOCKS_POLL_MS || 300000) : POLL);
   setInterval(saveAll, +process.env.SAVE_MS || 120000);
   setInterval(() => vaultStates(), (+process.env.VAULT_STATE_MIN || 150) * 60000);
+  if (process.env.UPSTOX_TOKEN) { const ld = () => UPX.loadInstruments().then(ok => { if (!ok) setTimeout(ld, 120000); }); ld(); setInterval(ld, 12 * 3600e3); }
   LAB.start({ store: { save: persist, load: restore } }).catch(e => console.error('lab start', e.message));
+  if ((process.env.BACKTEST || 'on') !== 'off') { setTimeout(() => BT.run(), +process.env.BT_FIRST_MS || 150000); setInterval(() => BT.run(), (+process.env.BT_EVERY_H || 12) * 3600e3); }
   if (process.env.SELF_URL) setInterval(() => fetch(process.env.SELF_URL + '/healthz').catch(() => {}), 10 * 60 * 1000);
   const bye = async () => { try { await saveAll(); await LAB.shutdown(); await vaultStates('Shutdown snapshot'); } catch (e) { /* best effort */ } process.exit(0); };
   process.on('SIGTERM', bye); process.on('SIGINT', bye);

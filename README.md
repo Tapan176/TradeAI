@@ -71,3 +71,8 @@ Environment variables (set in Render -> Environment):
 - Tuning: `LAB_SYMS`, `LAB_RISK_PCT` (0.5), `LAB_MIN_CONF` (0.6), `LESSON_MIN_N` (20), `SAVE_MS` (120000), `VAULT_FLUSH_MIN` (15), `VAULT_STATE_MIN` (150).
 
 Notes: LLM decisions cannot be back-tested (the model may have seen the history), so only forward paper results count; expect to need about 100+ trades per bot per market before comparing. Telegram data is used only at inference time. Free Render sleeps after 15 min idle unless `SELF_URL` is set; Starter ($7/mo) is the true 24x7 option.
+
+## Free live India data + backtests
+- `UPSTOX_TOKEN`: free Upstox **Analytics Token** (Developer Apps → Analytics tab; read-only, valid 1 year). Enables live NSE indices, F&O option chain and 2+ years of 15-minute history for backtests. NSE blocks cloud IPs, so without it India indices/F&O stay idle.
+- `LAB_MAX_COST_R` (e.g. `0.25`): skip entries whose round-trip fees+slippage exceed that fraction of the stop distance.
+- Backtests: open the **Backtest** tab or `GET /api/backtest`; they start ~2.5 min after boot and every 12 h. Tuning: `BT_SYMS_IN`, `BT_SYMS_CRYPTO`, `BT_DAYS_UPSTOX`, `BT_CRYPTO_DAYS`. `YAHOO_GAP_MS` paces Yahoo requests.

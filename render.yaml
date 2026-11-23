@@ -36,3 +36,7 @@ services:
         sync: false
       - key: LAB_SYMS
         value: "^NSEI,^NSEBANK,RELIANCE.NS,HDFCBANK.NS,BTC-USD,ETH-USD"
+      - key: UPSTOX_TOKEN
+        sync: false
+      - key: LAB_MAX_COST_R
+        sync: false

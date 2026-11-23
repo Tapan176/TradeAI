@@ -283,7 +283,7 @@
         if (!x.analysis && x.candles.length >= 30) x.analysis = analysis(u);
       });
       S.quoteSrc = cfg.underlyings.some(u => S.und[u].chain) ? 'chain' : 'modeled';
-      S.feed.note = (mk.note ? mk.note + ' · ' : '') + 'option prices: ' + (S.quoteSrc === 'chain' ? 'LIVE NSE option chain' : 'MODELED (Black-Scholes from live spot + India VIX)');
+      S.feed.note = (mk.note ? mk.note + ' · ' : '') + 'option prices: ' + (S.quoteSrc === 'chain' ? 'LIVE option chain (broker feed)' : 'MODELED (Black-Scholes from live spot + India VIX)');
       S.feed.mode = S.quoteSrc === 'chain' ? 'live' : 'modeled';
       // expiry settlement happens at the close of expiry day
       if (mk.newDay) {
