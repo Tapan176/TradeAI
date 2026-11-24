@@ -651,9 +651,16 @@ function render(){
   var cc=$('#ctrl');if(cc)cc.style.display=(SERVER&&(ui.tab==='lab'||ui.tab==='charts'||ui.tab==='home'||ui.tab==='bt'))?'none':'';
   if(SERVER&&(ui.tab==='home'||ui.tab==='bt'||ui.tab==='bots')){proTab();return}
   if(SERVER&&(ui.tab==='lab'||ui.tab==='charts')){labTab();return}
+  if(Date.now()-SCROLLAT<700)return; /* never rebuild the page under a finger / fling: it resets the scroll offset */
   var v={system:vSystem,strategies:vStrategies,setups:vSetups,overview:vOverview,market:vMarket,trades:vTrades,agents:vAgents,learning:vLearning,playbook:vPlaybook}[ui.tab]();
-  var y=window.scrollY;$('#view').innerHTML=v;drawCharts();window.scrollTo(0,y);
+  if(typeof postView==='function')try{v=postView(v)}catch(e){}
+  var vw=$('#view');
+  if(v===LASTVIEW&&LASTFIRST&&vw.firstElementChild===LASTFIRST){drawCharts();return} /* nothing changed: leave the DOM (and the scroll) alone */
+  LASTVIEW=v;
+  var y=window.scrollY;vw.innerHTML=v;LASTFIRST=vw.firstElementChild;drawCharts();if(window.scrollY!==y)window.scrollTo(0,y);
 }
+var SCROLLAT=0,LASTVIEW='',LASTFIRST=null;
+['scroll','touchmove'].forEach(function(n){window.addEventListener(n,function(){SCROLLAT=Date.now()},{passive:true})});
 
 /* ---------- events ---------- */
 function afterTq(){ui.tq.page=0;clearTimeout(tTimer);tTimer=setTimeout(refreshTradeList,220)}
@@ -1243,7 +1250,7 @@ document.addEventListener('click',function(e){var t=e.target;if(!t.closest)retur
   if(t.closest('#m_theme')){var b=$('#theme');if(b)b.click();return}
   if(t.closest('#m_inst')){closeDrawer();var i=$('#install');if(i)i.click();return}
   var hg=t.closest('[data-botmk-go]');if(hg)LAB.mk=hg.getAttribute('data-botmk-go');
-  var bm=t.closest('[data-botmk]');if(bm){LAB.mk=bm.getAttribute('data-botmk');botsPaint();return}
+  var bm=t.closest('[data-botmk]');if(bm){LAB.mk=bm.getAttribute('data-botmk');botsPaint(true);return}
 },true);
 
 /* ---------- shared helpers ---------- */
@@ -1295,9 +1302,15 @@ function posRow(p){
 }
 function posFetch(){if(PRO.posBusy||Date.now()-(PRO.posAt||0)<8000)return;PRO.posBusy=true;jf('/api/positions').then(function(j){PRO.pos=j;PRO.posAt=Date.now();PRO.posBusy=false;if(ui.tab==='bots')botsPaint()}).catch(function(){PRO.posBusy=false})}
 function mkSelect(id,val,counts){return '<select id="'+id+'" aria-label="Market">'+MKOPT.map(function(o){return '<option value="'+o[0]+'"'+(val===o[0]?' selected':'')+'>'+o[1]+(counts&&counts[o[0]]!=null?' ('+counts[o[0]]+')':'')+'</option>'}).join('')+'</select>'}
-function botsPaint(){
+function scrolling(){return Date.now()-SCROLLAT<700}
+var DIRTY={};
+function botsPaint(force){
   var el=$('#botsroot');if(!el)return;
-  var ae=document.activeElement;if(ae&&ae.tagName==='SELECT'&&el.contains(ae))return;
+  if(!force){
+    if(scrolling()){DIRTY.bots=1;return}
+    var ae=document.activeElement;if(ae&&ae.tagName==='SELECT'&&el.contains(ae))return;
+  }
+  DIRTY.bots=0;
   var L=LAB.d,F=PRO.feeds,mk=LAB.mk,h='';
   h+='<div class="sect"><h3>AI Lab bots</h3><select id="botmk" aria-label="Bot market"><option value="CRYPTO"'+(mk==='CRYPTO'?' selected':'')+'>Crypto ($)</option><option value="IN"'+(mk==='IN'?' selected':'')+'>India (₹)</option></select></div>';
   h+=L?'<div class="bgrid">'+L.bots.map(function(b){return botCard(b,mk)}).join('')+'</div>':'<div class="bgrid"><div class="skel" style="height:120px"></div><div class="skel" style="height:120px"></div></div>';
@@ -1306,7 +1319,8 @@ function botsPaint(){
   h+='<div class="sect"><h3>Open positions · '+shown.length+'</h3>'+mkSelect('posmk',APP.mk,counts)+'</div>';
   h+='<div class="card">'+(shown.length?shown.slice(0,40).map(posRow).join(''):'<div class="sub">'+((L&&PRO.pos)?'No open positions'+(APP.mk==='ALL'?'':' in this market')+'. Bots act on closed 15-minute bars when their market is open.':'Loading…')+'</div>')+'</div>';
   h+='<div class="sect"><h3>Paper books · per market</h3><span class="hint">tap to open</span></div><div style="display:grid;gap:8px">'+(F&&F.slots?F.slots.map(slotCard).join(''):'<div class="skel" style="height:64px"></div><div class="skel" style="height:64px"></div>')+'</div>';
-  el.innerHTML=h;
+  if(el.__h===h&&el.firstElementChild)return;
+  el.__h=h;el.innerHTML=h;
 }
 function botsTab(){
   if(!$('#botsroot')){$('#view').innerHTML='<div id="botsroot"></div>';botsPaint()}
@@ -1341,11 +1355,14 @@ function labPosCard(){
   var ps=(LAB.d.positions||[]).filter(function(p){return (p.cur==='₹'?'IN':'CRYPTO')===mk}).map(function(p){return {src:'AI Lab · bot '+p.bot,col:BOTCOL[p.bot]||'#555',name:p.name||p.sym,side:p.side,cur:p.cur,entry:p.entry,price:p.last,stop:p.stop,pnl:p.pnl,r:p.r}});
   return '<div class="card" id="labpos" style="margin-bottom:10px"><div class="row"><h2>AI Lab bots · open in '+(mk==='IN'?'India':'Crypto')+' · '+ps.length+'</h2><button data-tab="bots" style="min-height:28px;padding:2px 10px;font-size:12px">All bots →</button></div>'+(ps.length?ps.map(posRow).join(''):'<div class="sub">No open AI Lab positions in this market.</div>')+'</div>';
 }
-var _render=render;
-render=function(){
-  _render();
-  try{if(ui.tab==='overview'){var v=$('#view'),o=$('#labpos');if(o)o.remove();var h=labPosCard();if(v&&h)v.insertAdjacentHTML('afterbegin',h);if(!LAB.d||Date.now()-LAB.at>15000)labFetch()}}catch(e){}
-};
+function postView(v){
+  if(ui.tab!=='overview')return v;
+  if(!LAB.d||Date.now()-LAB.at>15000)labFetch();
+  var h=labPosCard();if(!h)return v;
+  h=h.replace('margin-bottom:10px','margin-top:8px');
+  var mark='<div class="card" style="margin-top:8px"><h2>Open positions (',i=v.indexOf(mark);
+  return i>=0?v.slice(0,i)+h+v.slice(i):v+h;
+}
 /* ---------- Markets / Charts: market + symbol dropdowns ---------- */
 function qMk(q){return q.cur==='₹'?'IN':/-USD$/.test(q.sym)?'CRYPTO':'GLOBAL'}
 function chStrip(){
@@ -1362,12 +1379,19 @@ function chStrip(){
 }
 document.addEventListener('change',function(e){
   var id=e.target&&e.target.id,v=e.target&&e.target.value;
+  if(e.target&&e.target.tagName==='SELECT'){try{e.target.blur()}catch(x){}}
   if(id==='chmkt'){APP.chmk=v;var f=(LAB.px||[]).filter(function(q){return v==='ALL'||qMk(q)===v})[0];if(f){LAB.ch.sym=f.sym;LAB.ch.data=null;chStrip();chPaint(true);chLoad(true)}else chStrip()}
   else if(id==='chsymsel'){LAB.ch.sym=v;LAB.ch.data=null;chStrip();chPaint(true);chLoad(true)}
   else if(id==='slotsel'){if(v!==ui.slot){ui.slot=v;try{localStorage.setItem('paperbot4:slot',v)}catch(x){}snap=null;$('#status').textContent='loading '+v+'…';poll().then(function(){openStream()})}}
-  else if(id==='posmk'){APP.mk=v;botsPaint()}
-  else if(id==='botmk'){LAB.mk=v;botsPaint()}
+  else if(id==='posmk'){APP.mk=v;botsPaint(true)}
+  else if(id==='botmk'){LAB.mk=v;botsPaint(true)}
 },true);
+/* a repaint while the page is being scrolled snaps the scroll offset back: hold it until the scroll stops */
+var _labPaint=labPaint;labPaint=function(){if(scrolling()){DIRTY.lab=1;return}DIRTY.lab=0;_labPaint.apply(this,arguments)};
+var _homePaint2=homePaint;homePaint=function(){if(scrolling()){DIRTY.home=1;return}DIRTY.home=0;_homePaint2.apply(this,arguments)};
+window.addEventListener('click',function(){SCROLLAT=0},true);
+window.addEventListener('change',function(){SCROLLAT=0},true);
+setInterval(function(){if(scrolling())return;if(DIRTY.lab&&ui.tab==='lab')labPaint();if(DIRTY.home&&ui.tab==='home')homePaint();if(DIRTY.bots&&ui.tab==='bots')botsPaint()},400);
 try{if(!nseClock().open)LAB.mk='CRYPTO'}catch(e){}
 APPREADY=true;(function(){var h=location.hash.slice(1);if(h&&TABS.some(function(t){return t[0]===h}))ui.tab=h})();renderTabs();try{render()}catch(e){}
 
