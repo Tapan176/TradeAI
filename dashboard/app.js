@@ -149,7 +149,7 @@ function heroHtml(){
   return h;
 }
 var _homePaint=homePaint;
-homePaint=function(){_homePaint();var el=$('#homeroot');if(el)el.insertAdjacentHTML('afterbegin',heroHtml());wlFetch()};
+homePaint=function(){var el0=$('#homeroot'),hs=hsSave(el0);_homePaint();var el=$('#homeroot');if(el){el.insertAdjacentHTML('afterbegin',heroHtml());if(hs.length)hsRestore(el,hs)}wlFetch()};
 document.addEventListener('click',function(e){var w=e.target.closest&&e.target.closest('[data-wl]');if(w){LAB.ch.sym=w.getAttribute('data-wl');LAB.ch.data=null;goTab('charts');try{chLoad(true)}catch(x){}}},true);
 
 /* ---------- Bots screen ---------- */
@@ -198,7 +198,7 @@ function botsPaint(force){
   h+='<div class="card">'+(shown.length?shown.slice(0,40).map(posRow).join(''):'<div class="sub">'+((L&&PRO.pos)?'No open positions'+(APP.mk==='ALL'?'':' in this market')+'. Bots act on closed 15-minute bars when their market is open.':'Loading…')+'</div>')+'</div>';
   h+='<div class="sect"><h3>Paper books · per market</h3><span class="hint">tap to open</span></div><div style="display:grid;gap:8px">'+(F&&F.slots?F.slots.map(slotCard).join(''):'<div class="skel" style="height:64px"></div><div class="skel" style="height:64px"></div>')+'</div>';
   if(el.__h===h&&el.firstElementChild)return;
-  el.__h=h;el.innerHTML=h;
+  el.__h=h;setHTML(el,h);
 }
 function botsTab(){
   if(!$('#botsroot')){$('#view').innerHTML='<div id="botsroot"></div>';botsPaint()}
@@ -350,7 +350,7 @@ function fundsPaint(force){
         '<span class="ftag'+(b.restored?'':' w')+'">'+(b.restored?'balance restored from '+esc(b.restored)+' at boot':'started fresh at boot — no saved state was found')+'</span>'+(b.halted?'<span class="ftag w">halted by drawdown limit</span>':'')+fBookEdit(b)+'</div>'});
     h+='</div>'}
   h+='<div class="sect"><h3>How to read this</h3></div><div class="fnote">Every account is virtual paper money and trades only its own balance. AI Lab accounts and paper books are separate: the same BTC or Nifty move can appear in both, so do not add them as one pool. AI Lab sizes each trade by risk ('+(F.labCfg.riskPct!=null?(F.labCfg.riskPct*100).toFixed(1):'?')+'% of equity at the stop, up to '+(F.labCfg.maxNotional!=null?F.labCfg.maxNotional+'× equity':'?')+' per trade, '+(F.labCfg.maxPos||'?')+' slots) and does not deduct cash when a trade opens, so "in use" there is exposure, not spent money. Paper books do track cash. Use Edit amounts to change an account\'s start amount, trade size and slots (admin token needed). The original values are kept as defaults, so Reset puts them back. Changing a start amount acts like a deposit or withdrawal: profit and loss stay as they are.</div>';
-  if(el.__h===h&&el.firstElementChild)return;el.__h=h;el.innerHTML=h;
+  if(el.__h===h&&el.firstElementChild)return;el.__h=h;setHTML(el,h);
 }
 function fundsTab(){
   if(!$('#fundsroot')){$('#view').innerHTML='<div id="fundsroot"></div>';fundsPaint(true)}
@@ -592,7 +592,7 @@ function botPgPaint(force){
   var i=ids.indexOf(b.id),pv=L.bots[(i+ids.length-1)%ids.length],nx=L.bots[(i+1)%ids.length];
   h+='<div class="bpn"><button data-bpbot="'+esc(pv.id)+'">‹ '+esc(pv.id)+' · '+esc(pv.name)+'</button><button data-bpbot="'+esc(nx.id)+'">'+esc(nx.id)+' · '+esc(nx.name)+' ›</button></div>';
   if(el.__h===h&&el.firstElementChild)return;
-  var sx=el.scrollLeft;el.__h=h;el.innerHTML=h;if(sub==='overview')bpEquity(L,b,mk);
+  el.__h=h;setHTML(el,h);if(sub==='overview')bpEquity(L,b,mk);
   document.title='PaperBot · Bot '+b.id+' · '+b.name;
 }
 document.addEventListener('click',function(e){var t=e.target;if(!t.closest||ui.tab!=='bot')return;var x;

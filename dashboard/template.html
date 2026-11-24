@@ -657,7 +657,7 @@ function render(){
   var vw=$('#view');
   if(v===LASTVIEW&&LASTFIRST&&vw.firstElementChild===LASTFIRST){drawCharts();return} /* nothing changed: leave the DOM (and the scroll) alone */
   LASTVIEW=v;
-  var y=window.scrollY;vw.innerHTML=v;LASTFIRST=vw.firstElementChild;drawCharts();if(window.scrollY!==y)window.scrollTo(0,y);
+  var y=window.scrollY;if(typeof setHTML==='function')setHTML(vw,v);else vw.innerHTML=v;LASTFIRST=vw.firstElementChild;drawCharts();if(window.scrollY!==y)window.scrollTo(0,y);
 }
 var SCROLLAT=0,LASTVIEW='',LASTFIRST=null;
 ['scroll','touchmove'].forEach(function(n){window.addEventListener(n,function(){SCROLLAT=Date.now()},{passive:true})});

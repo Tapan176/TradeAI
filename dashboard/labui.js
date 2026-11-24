@@ -1,6 +1,12 @@
 /* ===== AI Lab + Charts tabs (server mode only). Self-updating: render() leaves these two tabs alone. ===== */
 var LAB={d:null,at:0,busy:false,mk:'IN',ch:{sym:'^NSEI',tf:'15m',ema:true,mk:true,data:null,at:0,busy:false,key:''},px:null,pxAt:0,syms:null,tgmsg:''};
 var BOTCOL={A:'#0072B2',B:'#E69F00',C:'#009E73',C0:'#CC79A7',Q:'#D55E00'},MKT={IN:'India (₹)',CRYPTO:'Crypto ($)'};
+/* Live redraws replace innerHTML, which recreates every sideways-scrollable table/strip at scrollLeft 0 ("jumps back left").
+ * setHTML() remembers each scrolled element by its child-index path, writes the new HTML, then puts the offsets back. */
+function hsSave(root){var out=[];if(!root)return out;var all=root.getElementsByTagName('*');for(var i=0;i<all.length;i++){var e=all[i];if(e.scrollLeft>0){var p=[],n=e;while(n&&n!==root){var k=0,s=n;while((s=s.previousElementSibling))k++;p.unshift(k);n=n.parentElement}if(n===root)out.push([p,e.scrollLeft])}}return out}
+function hsRestore(root,saved){saved.forEach(function(x){var n=root;for(var i=0;i<x[0].length&&n;i++)n=n.children[x[0][i]];if(n)n.scrollLeft=x[1]})}
+function setHTML(el,h){var x=el.scrollLeft,s=hsSave(el);el.innerHTML=h;if(s.length)hsRestore(el,s);if(x)el.scrollLeft=x}
+document.addEventListener('scroll',function(){if(typeof SCROLLAT!=='undefined')SCROLLAT=Date.now()},{capture:true,passive:true});   /* element scrolls (tables, chip strips) do not bubble to window: capture them so redraws wait */
 /* hash routing: #bot/C opens the AI Lab bot page of bot C; every other tab is its plain id */
 function hashTab(){var p=location.hash.slice(1).split('/');if(p[0]==='bot'&&p[1]&&/^[A-Za-z0-9]{1,4}$/.test(p[1])){LAB.bot=p[1];try{localStorage.setItem('paperbot4:labbot',p[1])}catch(e){}}return p[0]}
 function tabHash(){return ui.tab==='bot'&&LAB.bot?'bot/'+LAB.bot:ui.tab}
@@ -75,8 +81,8 @@ function labTg(d){
 }
 function labPaint(){
   var d=LAB.d,el=$('#labroot');if(!d||!el)return;
-  var ae=document.activeElement;if(ae&&ae.id==='tgtxt'&&ae.value){ /* keep typing intact */ var keep=ae.value;el.innerHTML=labStatus(d)+labCompare(d)+'<div id="labeq" class="card" style="margin-top:8px"><h2>Equity, % of start · '+MKT[LAB.mk]+'</h2><div class="lwc" data-h="220" id="labeqc"></div><div class="legend" id="labeqleg"></div></div><div style="margin-top:8px">'+labPositions(d)+'</div><div style="margin-top:8px">'+labScan(d)+'</div><div style="margin-top:8px">'+labLessons(d)+'</div><div style="margin-top:8px">'+labTg(d)+'</div><div style="margin-top:8px">'+labDecisions(d)+'</div>';var t=$('#tgtxt');if(t){t.value=keep;t.focus()}}
-  else el.innerHTML=labStatus(d)+labCompare(d)+'<div id="labeq" class="card" style="margin-top:8px"><h2>Equity, % of start · '+MKT[LAB.mk]+'</h2><div class="lwc" data-h="220" id="labeqc"></div><div class="legend" id="labeqleg"></div></div><div style="margin-top:8px">'+labPositions(d)+'</div><div style="margin-top:8px">'+labScan(d)+'</div><div style="margin-top:8px">'+labLessons(d)+'</div><div style="margin-top:8px">'+labTg(d)+'</div><div style="margin-top:8px">'+labDecisions(d)+'</div>';
+  var ae=document.activeElement;if(ae&&ae.id==='tgtxt'&&ae.value){ /* keep typing intact */ var keep=ae.value;setHTML(el,labStatus(d)+labCompare(d)+'<div id="labeq" class="card" style="margin-top:8px"><h2>Equity, % of start · '+MKT[LAB.mk]+'</h2><div class="lwc" data-h="220" id="labeqc"></div><div class="legend" id="labeqleg"></div></div><div style="margin-top:8px">'+labPositions(d)+'</div><div style="margin-top:8px">'+labScan(d)+'</div><div style="margin-top:8px">'+labLessons(d)+'</div><div style="margin-top:8px">'+labTg(d)+'</div><div style="margin-top:8px">'+labDecisions(d)+'</div>');var t=$('#tgtxt');if(t){t.value=keep;t.focus()}}
+  else setHTML(el,labStatus(d)+labCompare(d)+'<div id="labeq" class="card" style="margin-top:8px"><h2>Equity, % of start · '+MKT[LAB.mk]+'</h2><div class="lwc" data-h="220" id="labeqc"></div><div class="legend" id="labeqleg"></div></div><div style="margin-top:8px">'+labPositions(d)+'</div><div style="margin-top:8px">'+labScan(d)+'</div><div style="margin-top:8px">'+labLessons(d)+'</div><div style="margin-top:8px">'+labTg(d)+'</div><div style="margin-top:8px">'+labDecisions(d)+'</div>');
   labEquity(d);
 }
 var labEq=null;
