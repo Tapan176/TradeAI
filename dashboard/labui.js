@@ -1,6 +1,9 @@
 /* ===== AI Lab + Charts tabs (server mode only). Self-updating: render() leaves these two tabs alone. ===== */
 var LAB={d:null,at:0,busy:false,mk:'IN',ch:{sym:'^NSEI',tf:'15m',ema:true,mk:true,data:null,at:0,busy:false,key:''},px:null,pxAt:0,syms:null,tgmsg:''};
 var BOTCOL={A:'#0072B2',B:'#E69F00',C:'#009E73',C0:'#CC79A7',Q:'#D55E00'},MKT={IN:'India (₹)',CRYPTO:'Crypto ($)'};
+/* hash routing: #bot/C opens the AI Lab bot page of bot C; every other tab is its plain id */
+function hashTab(){var p=location.hash.slice(1).split('/');if(p[0]==='bot'&&p[1]&&/^[A-Za-z0-9]{1,4}$/.test(p[1])){LAB.bot=p[1];try{localStorage.setItem('paperbot4:labbot',p[1])}catch(e){}}return p[0]}
+function tabHash(){return ui.tab==='bot'&&LAB.bot?'bot/'+LAB.bot:ui.tab}
 function lpct(x,d){return x==null?'–':(x*100).toFixed(d==null?1:d)+'%'}
 function lsgn(x,d){return x==null?'–':(x>0?'+':'')+x.toFixed(d==null?2:d)}
 function cls2(x){return x==null?'':x>0?'up':x<0?'dn':''}
@@ -8,7 +11,7 @@ function ago(ms){if(!ms)return 'never';var s=Math.round((Date.now()-ms)/1000);re
 function istStr(t){var d=new Date((t+19800)*1000);return d.toISOString().slice(5,16).replace('T',' ')}
 function labFetch(){
   if(LAB.busy)return;LAB.busy=true;
-  fetch('/api/lab',{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){LAB.d=j;LAB.at=Date.now();LAB.busy=false;if(ui.tab==='lab')labPaint();if(typeof sbRefreshLLM==='function'&&typeof SB!=='undefined'&&SB.open)sbRefreshLLM()}).catch(function(){LAB.busy=false});
+  fetch('/api/lab',{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){LAB.d=j;LAB.at=Date.now();LAB.busy=false;if(ui.tab==='lab')labPaint();else if(ui.tab==='bot'&&window.botPgPaint)botPgPaint();if(typeof sbRefreshLLM==='function'&&typeof SB!=='undefined'&&SB.open)sbRefreshLLM()}).catch(function(){LAB.busy=false});
 }
 function labToken(){var t=null;try{t=sessionStorage.getItem('pbtoken')}catch(e){}if(!t){t=window.prompt('Admin token (ADMIN_TOKEN env var on your server):');if(t){try{sessionStorage.setItem('pbtoken',t)}catch(e){}}}return t}
 function llmSet(on){
@@ -36,7 +39,7 @@ function labCompare(d){
   var mk=LAB.mk,seg='<span class="seg">'+['IN','CRYPTO'].map(function(k){return '<button data-labmk="'+k+'" class="'+(mk===k?'on':'')+'">'+MKT[k]+'</button>'}).join('')+'</span>';
   var rows=d.bots.map(function(b){var m=b.byBook[mk],v=b.vsRule,tag=(m.trades<30?'<span class="mut"> · tiny sample</span>':'');
     var vs=b.id==='A'?'<span class="mut">benchmark</span>':(v&&v.mean!=null?'<span class="'+cls2(v.mean)+'">'+lsgn(v.mean)+'R/day</span>'+(v.ci?' <span class="mut">['+lsgn(v.ci[0])+', '+lsgn(v.ci[1])+']</span>':''):'<span class="mut">needs 5+ days</span>');
-    return '<tr><td><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+BOTCOL[b.id]+';margin-right:6px;vertical-align:middle"></i><b>'+esc(b.id)+'</b><div class="sub" style="font-size:11px;line-height:1.2">'+esc(b.name)+'</div></td><td class="r num">'+m.trades+tag+'</td><td class="r num">'+(m.hit==null?'–':lpct(m.hit,0)+' <span class="mut">('+lpct(m.hitCI[0],0)+'–'+lpct(m.hitCI[1],0)+')</span>')+'</td><td class="r num '+cls2(m.expR)+'">'+(m.expR==null?'–':lsgn(m.expR))+'</td><td class="r num '+cls2(m.pnlPct)+'">'+lsgn(m.pnlPct*100)+'%</td><td class="r num">'+m.open+'</td><td class="r num">'+(b.stats.vetoed||0)+'/'+(b.stats.unreviewed||0)+'</td><td class="r">'+vs+'</td></tr>'}).join('');
+    return '<tr data-tab="bot" data-bot="'+esc(b.id)+'" data-botmk-go="'+mk+'" style="cursor:pointer"><td><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+BOTCOL[b.id]+';margin-right:6px;vertical-align:middle"></i><b>'+esc(b.id)+'</b><div class="sub" style="font-size:11px;line-height:1.2">'+esc(b.name)+'</div></td><td class="r num">'+m.trades+tag+'</td><td class="r num">'+(m.hit==null?'–':lpct(m.hit,0)+' <span class="mut">('+lpct(m.hitCI[0],0)+'–'+lpct(m.hitCI[1],0)+')</span>')+'</td><td class="r num '+cls2(m.expR)+'">'+(m.expR==null?'–':lsgn(m.expR))+'</td><td class="r num '+cls2(m.pnlPct)+'">'+lsgn(m.pnlPct*100)+'%</td><td class="r num">'+m.open+'</td><td class="r num">'+(b.stats.vetoed||0)+'/'+(b.stats.unreviewed||0)+'</td><td class="r">'+vs+'</td></tr>'}).join('');
   return '<div class="card"><div class="row"><h2>Bots, judged per market</h2>'+seg+'</div><div class="scroll"><table><tr><th>Bot</th><th class="r">Trades</th><th class="r">Hit rate (95% CI)</th><th class="r">Expect. R</th><th class="r">P&amp;L</th><th class="r">Open</th><th class="r" title="vetoed / could not be reviewed">Veto/skip</th><th class="r">vs rule bot</th></tr>'+rows+'</table></div>'+
     '<div class="sub" style="margin-top:6px">Same data, fees (4–5 bps) and 0.5% risk per trade for every bot. R = profit in units of the amount risked. Do not trust any ranking before ~100 trades per bot per market; an LLM bot can only be judged on forward results, never on a back-test.</div></div>';
 }
@@ -134,9 +137,12 @@ function chPaint(force){
   var li=cs.length?cs[cs.length-1]:null;$('#chinfo').textContent=(C.data.name||C.sym)+' · '+(C.data.open?'market open':'market closed')+' · '+(C.data.src||'')+' · updated '+new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
 }
 function labTab(){
-  var cc=$('#ctrl');if(cc)cc.style.display=(ui.tab==='lab'||ui.tab==='charts')?'none':'';
+  var cc=$('#ctrl');if(cc)cc.style.display=(ui.tab==='lab'||ui.tab==='charts'||ui.tab==='bot')?'none':'';
   if(ui.tab==='lab'){
     if(!$('#labroot')){$('#view').innerHTML='<div id="labroot"><div class="card sub">Loading AI Lab…</div></div>';labFetch()}
+    else if(Date.now()-LAB.at>10000)labFetch();
+  }else if(ui.tab==='bot'){
+    if(!$('#botpgroot')){$('#view').innerHTML='<div id="botpgroot"><div class="card sub">Loading bot…</div></div>';labFetch();if(LAB.d)botPgPaint(true)}
     else if(Date.now()-LAB.at>10000)labFetch();
   }else if(ui.tab==='charts'){
     if(!$('#chhost')){chScaffold();chPx();chLoad(true)}
@@ -155,7 +161,7 @@ document.addEventListener('click',function(e){
   if(t.closest('#tgsend')){var v=($('#tgtxt')||{}).value;if(!v)return;var tk=labToken();if(!tk)return;fetch('/api/lab/tg/ingest',{method:'POST',headers:{'x-admin-token':tk,'Content-Type':'application/json'},body:JSON.stringify({text:v})}).then(function(r){if(r.status===401){try{sessionStorage.removeItem('pbtoken')}catch(e){}LAB.tgmsg='Wrong admin token';return {}}return r.json()}).then(function(j){if(j.accepted){LAB.tgmsg='Added ('+j.state+')';var x=$('#tgtxt');if(x)x.value=''}else if(j.accepted===false)LAB.tgmsg='Ignored: not a trade call or already seen';labFetch()});return}
 },true);
 window.addEventListener('resize',function(){if(ui.tab==='lab')labEquity(LAB.d||{bots:[],curves:{},cfg:{books:{}}});if(ui.tab==='charts'&&chObj){var h=$('#chhost');if(h)chObj.chart.applyOptions({width:Math.max(260,h.clientWidth)})}});
-setInterval(function(){if(ui.tab==='lab'||ui.tab==='charts')labTab()},3000);
+setInterval(function(){if(ui.tab==='lab'||ui.tab==='charts'||ui.tab==='bot')labTab()},3000);
 
 /* ---- chart search: any symbol Yahoo or Coinbase knows opens on demand (the bots trade a short watchlist; charts are free to open) ---- */
 var CHS={t:null,q:''};
