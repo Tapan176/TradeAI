@@ -66,13 +66,17 @@ function analyse(rows, tradeDate) {
   const u = {}; rows.forEach(r => { const o = u[r.sym] = u[r.sym] || { sym: r.sym, fut: [], opt: [], idx: r.t[0] === 'I' }; (r.t[1] === 'F' ? o.fut : o.opt).push(r); });
   const out = [];
   Object.values(u).forEach(o => {
-    o.fut.sort((a, b) => a.exp < b.exp ? -1 : 1); const f = o.fut.find(x => x.exp >= tradeDate) || o.fut[0], res = { sym: o.sym, index: o.idx, spot: (o.fut.concat(o.opt).find(x => x.und > 0) || {}).und || null };
-    if (f) { const oiPrev = f.oi - f.doi, pp = f.prev > 0 ? (f.close / f.prev - 1) * 100 : null, op = oiPrev > 0 ? f.doi / oiPrev * 100 : null; res.fut = { expiry: f.exp, close: f.close, pricePct: pp, oi: f.oi, dOi: f.doi, oiPct: op, vol: f.vol, class: buildup(pp, op) }; res.futOiAll = o.fut.reduce((s, x) => s + x.oi, 0); }
+    o.fut.sort((a, b) => a.exp < b.exp ? -1 : 1); const near0 = o.fut.find(x => x.exp >= tradeDate) || o.fut[0], res = { sym: o.sym, index: o.idx, spot: (o.fut.concat(o.opt).find(x => x.und > 0) || {}).und || null };
+    // On expiry day the expiring contract's open interest is settled, not unwound, so a build-up read from it is wrong for every name at once.
+    // Price comes from the first contract that is still alive tomorrow; open interest is the change across ALL series (rollover nets out).
+    const alive = o.fut.find(x => x.exp > tradeDate), expiring = !!(near0 && near0.exp === tradeDate), f = expiring && alive ? alive : near0;
+    if (f) { const oiAll = o.fut.reduce((s, x) => s + x.oi, 0), dAll = o.fut.reduce((s, x) => s + x.doi, 0), oiPrev = oiAll - dAll, pp = f.prev > 0 ? (f.close / f.prev - 1) * 100 : null, op = oiPrev > 0 ? dAll / oiPrev * 100 : null; res.fut = { expiry: f.exp, close: f.close, pricePct: pp, oi: oiAll, dOi: dAll, oiPct: op, vol: f.vol, class: buildup(pp, op) }; res.futOiAll = oiAll; if (expiring) res.expiryDay = true; }
     if (o.opt.length) {
-      const exps = [...new Set(o.opt.map(x => x.exp))].sort(), e1 = exps.find(x => x >= tradeDate) || exps[0], near = o.opt.filter(x => x.exp === e1), ce = near.filter(x => x.ot === 'CE'), pe = near.filter(x => x.ot === 'PE');
+      const exps = [...new Set(o.opt.map(x => x.exp))].sort(), e0 = exps.find(x => x >= tradeDate) || exps[0], e1 = e0 === tradeDate ? (exps.find(x => x > tradeDate) || e0) : e0, near = o.opt.filter(x => x.exp === e1), ce = near.filter(x => x.ot === 'CE'), pe = near.filter(x => x.ot === 'PE');
       const sum = (a, k) => a.reduce((s, x) => s + x[k], 0), ceOi = sum(ce, 'oi'), peOi = sum(pe, 'oi'), allCe = sum(o.opt.filter(x => x.ot === 'CE'), 'oi'), allPe = sum(o.opt.filter(x => x.ot === 'PE'), 'oi');
-      const top = a => a.slice().sort((x, y) => y.oi - x.oi).slice(0, 3).map(x => ({ k: x.k, oi: x.oi, dOi: x.doi }));
-      res.opt = { expiry: e1, ceOi, peOi, pcr: ceOi > 0 ? peOi / ceOi : null, pcrAll: allCe > 0 ? allPe / allCe : null, maxPain: maxPain(near.filter(x => x.ot)), resist: top(ce), support: top(pe), vol: sum(near, 'vol') };
+      const sp = res.spot, top = (a, side) => a.filter(x => !sp || (side === 'c' ? x.k >= sp : x.k <= sp)).sort((x, y) => y.oi - x.oi).slice(0, 3).map(x => ({ k: x.k, oi: x.oi, dOi: x.doi }));   // walls are out-of-the-money strikes only
+      res.opt = { expiry: e1, ceOi, peOi, pcr: ceOi > 0 ? peOi / ceOi : null, pcrAll: allCe > 0 ? allPe / allCe : null, maxPain: maxPain(near.filter(x => x.ot)), resist: top(ce, 'c'), support: top(pe, 'p'), vol: sum(near, 'vol') };
+      if (e0 === tradeDate && e1 !== e0) { const xo = o.opt.filter(x => x.exp === e0), xc = sum(xo.filter(x => x.ot === 'CE'), 'oi'), xp = sum(xo.filter(x => x.ot === 'PE'), 'oi'); res.optExpiring = { expiry: e0, pcr: xc > 0 ? xp / xc : null, maxPain: maxPain(xo.filter(x => x.ot)) }; }
     }
     out.push(res);
   });
@@ -80,7 +84,7 @@ function analyse(rows, tradeDate) {
   const pick = (cl, key, dir) => liquid.filter(x => x.fut.class === cl).sort((a, b) => dir * (b.fut[key] - a.fut[key])).slice(0, 8).map(x => ({ sym: x.sym, pricePct: x.fut.pricePct, oiPct: x.fut.oiPct, oi: x.fut.oi }));
   const breadth = { 'long buildup': 0, 'short buildup': 0, 'short covering': 0, 'long unwinding': 0, neutral: 0 }; liquid.forEach(x => { if (breadth[x.fut.class] != null) breadth[x.fut.class]++; });
   const idxs = INDEXES.map(s => out.find(x => x.sym === s)).filter(Boolean);
-  return { tradeDate, underlyings: out.length, stocksWithFutures: stocks.length, indices: idxs, breadth, leaders: { 'long buildup': pick('long buildup', 'oiPct', 1), 'short buildup': pick('short buildup', 'oiPct', 1), 'short covering': pick('short covering', 'oiPct', -1), 'long unwinding': pick('long unwinding', 'oiPct', -1) } };
+  return { tradeDate, expiryDay: idxs.some(x => x.expiryDay), underlyings: out.length, stocksWithFutures: stocks.length, breadthOf: liquid.length, indices: idxs, breadth, leaders: { 'long buildup': pick('long buildup', 'oiPct', 1), 'short buildup': pick('short buildup', 'oiPct', 1), 'short covering': pick('short covering', 'oiPct', -1), 'long unwinding': pick('long unwinding', 'oiPct', -1) } };
 }
 
 /* ---- participant-wise OI ---- */

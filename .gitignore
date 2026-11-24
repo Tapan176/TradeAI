@@ -1,2 +1,8 @@
 node_modules
 data
+
+# local-only files (NSE downloads used for symbol counts, stale early copies, generated offline build)
+/server/
+fo_mktlots.csv
+sec_bhavdata_*.csv
+dashboard/artifact.html
