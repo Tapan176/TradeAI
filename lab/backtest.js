@@ -8,13 +8,14 @@
  *   3. Does any variant keep working OUT OF SAMPLE?  (first 60% of the timeline chooses, last 40% judges; median variant is reported next to the best one)
  * Honest limits: without Upstox, Yahoo only serves ~60 days of 15m bars (out-of-sample ~3 weeks); with UPSTOX_TOKEN set, Indian 15m history goes back to 2022. Treat everything as "evidence of what NOT to trade", not proof of an edge.
  * Upstox historical candles (minutes since 2022) are the way to get a conclusive sample. */
-const D = require('./data.js'), P = require('./paper.js'), UPX = require('./upstox.js');
+const D = require('./data.js'), P = require('./paper.js'), UPX = require('./upstox.js'), CF = require('./cryptofeeds.js');
 const S = (() => { try { return require('../signals.js'); } catch (e) { return require('../../signals.js'); } })();
 const E = process.env;
-const SYMS = { IN: (E.BT_SYMS_IN || '^NSEI,^NSEBANK,RELIANCE.NS,HDFCBANK.NS').split(',').map(s => s.trim()).filter(Boolean), CRYPTO: (E.BT_SYMS_CRYPTO || 'BTC-USD,ETH-USD,SOL-USD,XRP-USD').split(',').map(s => s.trim()).filter(Boolean) };
+const SYMS = { IN: (E.BT_SYMS_IN || '^NSEI,^NSEBANK,RELIANCE.NS,HDFCBANK.NS').split(',').map(s => s.trim()).filter(Boolean), CRYPTO: (E.BT_SYMS_CRYPTO || 'BTC-USD,ETH-USD,SOL-USD,XRP-USD,DOGE-USD,ADA-USD').split(',').map(s => s.trim()).filter(Boolean) };
 const FEE = P.CFG.feeBps, SLIP = P.CFG.slipBps;
 const r2 = P.r2, r3 = x => Math.round(x * 1000) / 1000;
 const tick = () => new Promise(r => setImmediate(r));
+const tfn = tf => tf === 900 ? '15m' : tf === 3600 ? '1h' : '4h';
 
 const st = { running: false, startedAt: 0, finishedAt: 0, progress: '', error: null, result: null, data: {}, dataAt: 0 };
 
@@ -116,7 +117,12 @@ async function loadSeries(book, days) {
   const out = [];
   for (const sym of SYMS[book]) {
     st.progress = 'downloading ' + sym;
-    try { let cs = await D.history15(sym, book === 'CRYPTO' ? Math.min(days, +E.BT_CRYPTO_DAYS || 120) : days); if (book === 'IN') cs = inSession(cs); if (cs.length > 300) out.push({ sym, cs }); } catch (e) { out.push({ sym, err: e.message, cs: [] }); }
+    try {
+      let cs, src = 'yahoo';
+      if (book === 'CRYPTO' && E.BT_CRYPTO_SRC !== 'yahoo') { try { cs = await CF.history(sym, '15m', +E.BT_CRYPTO_DAYS || 240); src = 'coinbase'; } catch (e) { st.cryptoHistErr = e.message; cs = null; } }
+      if (!cs) cs = await D.history15(sym, book === 'CRYPTO' ? Math.min(days, +E.BT_CRYPTO_DAYS || 120) : days);
+      if (book === 'IN') cs = inSession(cs); if (cs.length > 300) out.push({ sym, cs, src });
+    } catch (e) { out.push({ sym, err: e.message, cs: [] }); }
     await D.sleep(150);
   }
   st.data[book] = out; st.dataAt = Date.now(); return out;
@@ -124,10 +130,10 @@ async function loadSeries(book, days) {
 async function runBook(book, days) {
   const series = (await loadSeries(book, days)).filter(x => x.cs.length > 300), meta = { syms: [], variants: 0 };
   if (!series.length) return { book, error: 'no data' };
-  const tfs = [900, 3600], variants = [], allT0 = [];
+  const tfs = book === 'CRYPTO' ? [900, 3600, 14400] : [900, 3600], variants = [], allT0 = [];   // crypto also gets 4h bars: fees are a fixed share of price, so slower bars keep more of each move
   const prepped = [];
   series.forEach(s => {
-    meta.syms.push({ sym: s.sym, bars: s.cs.length, from: s.cs[0].t, to: s.cs[s.cs.length - 1].t, buyHoldPct: r2((s.cs[s.cs.length - 1].c / s.cs[0].o - 1) * 100) });
+    meta.syms.push({ sym: s.sym, src: s.src, bars: s.cs.length, from: s.cs[0].t, to: s.cs[s.cs.length - 1].t, buyHoldPct: r2((s.cs[s.cs.length - 1].c / s.cs[0].o - 1) * 100) });
     tfs.forEach(tf => prepped.push({ sym: s.sym, tf, sr: prep(tf === 900 ? s.cs : aggregate(s.cs, book, tf), book, tf) }));
     allT0.push(s.cs[0].t, s.cs[s.cs.length - 1].t);
   });
@@ -136,10 +142,10 @@ async function runBook(book, days) {
   /* cost anatomy at the live setting (1.5 ATR stop) */
   const rt = 2 * (FEE[book] + SLIP[book]) / 1e4, anatomy = {};
   prepped.forEach(p => { const a = p.sr.atr, cs = p.sr.cs, xs = []; for (let i = 100; i < cs.length; i += 3) if (Number.isFinite(a[i])) xs.push(1.5 * a[i] / cs[i].c); xs.sort((x, y) => x - y); const med = xs[xs.length >> 1] || 0; (anatomy[p.tf] = anatomy[p.tf] || []).push(med); });
-  const costAnatomy = {}; Object.keys(anatomy).forEach(tf => { const m = anatomy[tf].reduce((s, x) => s + x, 0) / anatomy[tf].length; costAnatomy[tf === '900' ? '15m' : '1h'] = { stopPct: r3(m * 100), roundTripBps: r2(rt * 1e4), costInR: r3(rt / m), breakEvenHitRate_at_RR1_67: r3((1 + rt / m) / (1 + 2.5 / 1.5)) }; });
+  const costAnatomy = {}; Object.keys(anatomy).forEach(tf => { const m = anatomy[tf].reduce((s, x) => s + x, 0) / anatomy[tf].length; costAnatomy[tfn(+tf)] = { stopPct: r3(m * 100), roundTripBps: r2(rt * 1e4), costInR: r3(rt / m), breakEvenHitRate_at_RR1_67: r3((1 + rt / m) / (1 + 2.5 / 1.5)) }; });
   let done = 0; const total = STRATS.length * tfs.length;
   for (const strat of STRATS) for (const tf of tfs) {
-    st.progress = book + ' ' + strat + ' ' + (tf === 900 ? '15m' : '1h') + ' (' + (++done) + '/' + total + ')'; await tick();
+    st.progress = book + ' ' + strat + ' ' + tfn(tf) + ' (' + (++done) + '/' + total + ')'; await tick();
     const group = prepped.filter(p => p.tf === tf); if (strat === 'orb' && (book !== 'IN' || tf !== 900)) continue;
     const sigs = group.map(p => signals(p.sr, strat));
     for (const [stopA, tgtA, trailA] of EXITS) { await tick(); for (const hold of holds) for (const sides of sidesL) for (const gate of gates) for (const win of wins) {
@@ -147,7 +153,7 @@ async function runBook(book, days) {
       group.forEach((p, gi) => simulate(p.sr, sigs[gi], cfg).forEach(t => all.push(t)));
       if (all.length < 8) continue;
       const is = all.filter(t => t.t0 < tSplit), oos = all.filter(t => t.t0 >= tSplit), a = stats(all), si = stats(is), so = stats(oos);
-      variants.push({ id: strat + '|' + (tf === 900 ? '15m' : '1h') + '|' + stopA + '/' + (trailA ? 'trail' + trailA : tgtA) + '|h' + hold + '|' + sides + '|g' + gate + '|' + win, strat, tf: tf === 900 ? '15m' : '1h', stop: stopA, tgt: tgtA, trail: trailA, hold, sides, gate, win,
+      variants.push({ id: strat + '|' + tfn(tf) + '|' + stopA + '/' + (trailA ? 'trail' + trailA : tgtA) + '|h' + hold + '|' + sides + '|g' + gate + '|' + win, strat, tf: tfn(tf), stop: stopA, tgt: tgtA, trail: trailA, hold, sides, gate, win,
         n: a.n, hit: a.hit, expR: a.expR, pf: a.pf, t: a.t, sumR: a.sumR, ddR: a.ddR, costR: a.costR, isN: si.n || 0, isExp: si.n ? si.expR : null, oosN: so.n || 0, oosExp: so.n ? so.expR : null, oosT: so.n ? so.t : null, oosHit: so.n ? so.hit : null });
     } }
   }
@@ -157,7 +163,7 @@ async function runBook(book, days) {
   for (const tf of tfs) for (const [stopA, tgtA, trailA] of EXITS) {
     const group = prepped.filter(p => p.tf === tf), vals = [];
     for (let seed = 1; seed <= 6; seed++) { const all = []; group.forEach((p, gi) => simulate(p.sr, randSignals(p.sr, seed * 97 + gi, 0.02), { stop: stopA, tgt: tgtA, trail: trailA, hold: 48, sides: 'both', gate: 0, win: 'live' }).forEach(t => all.push(t))); if (all.length) vals.push(stats(all).expR); }
-    if (vals.length) nullR.push({ tf: tf === 900 ? '15m' : '1h', stop: stopA, tgt: tgtA, trail: trailA, expR: vals.reduce((s, x) => s + x, 0) / vals.length });
+    if (vals.length) nullR.push({ tf: tfn(tf), stop: stopA, tgt: tgtA, trail: trailA, expR: vals.reduce((s, x) => s + x, 0) / vals.length });
   }
   const find = id => variants.find(v => v.id === id);
   const live = find('rule|15m|1.5/2.5|h48|both|g0|live'), liveNull = nullR.find(x => x.tf === '15m' && x.stop === 1.5 && x.tgt === 2.5);
@@ -191,6 +197,7 @@ function verdict(R) {
     L.push(b + ' multiple-testing check: with ' + r.variantsTested + ' variants tried, pure luck is expected to produce a best t-stat near ' + r.tDeflated + '; ' + (r.survivors ? r.survivors + ' candidate(s) clear that bar.' : 'no candidate clears that bar, so none can be called a real edge yet.'));
     L.push(b + ' candidates passing in-sample ≥0.1R, out-of-sample ≥0.1R, ≥20 OOS trades, t ≥ 1.5: ' + (r.winners.length ? r.winners.slice(0, 3).map(w => vname(w) + ' (OOS ' + w.oosExp + 'R, n=' + w.oosN + ')').join('; ') : 'none') + '.');
   });
+  const cr = R.books.CRYPTO && R.books.CRYPTO.syms && R.books.CRYPTO.syms[0]; if (cr && cr.src === 'coinbase') { const d = Math.round((cr.to - cr.from) / 86400); L.push('Crypto sample: Coinbase 15m history, ' + d + ' days (out-of-sample is the last ~' + Math.round(d * 0.4) + ' days); buy-and-hold over the window: ' + R.books.CRYPTO.syms.map(x => x.sym.replace('-USD', '') + ' ' + x.buyHoldPct + '%').join(', ') + '. A one-way market makes long-only look bad and shorts look good, so judge both sides separately.'); }
   L.push('Sample: ' + (R.days > 100 ? 'Upstox history, ~' + Math.round(R.days * 0.4 / 30) + ' months out-of-sample for India' : 'Yahoo gives only ~58 days of 15m bars, so out-of-sample is ~3 weeks (set UPSTOX_TOKEN for years)') + '. Variants tested: ' + ['IN', 'CRYPTO'].map(b => b + ' ' + ((R.books[b] && R.books[b].variantsTested) || 0)).join(', ') + ' — a few "winners" are expected by luck alone.');
   return L;
 }
@@ -206,6 +213,6 @@ async function run(opts) {
   } catch (e) { st.error = e.message; st.progress = 'failed'; console.error('backtest', e.message); }
   st.running = false; return { ok: !st.error };
 }
-function status() { return { running: st.running, progress: st.progress, error: st.error, startedAt: st.startedAt, finishedAt: st.finishedAt, hasResult: !!st.result, yahoo: D.ygStatus() }; }
+function status() { return { running: st.running, progress: st.progress, error: st.error, startedAt: st.startedAt, finishedAt: st.finishedAt, hasResult: !!st.result, cryptoHistErr: st.cryptoHistErr || null, yahoo: D.ygStatus() }; }
 function result(full) { if (!st.result) return null; return full ? Object.assign({}, st.result, { variants: st.variants }) : st.result; }
 module.exports = { run, status, result, simulate, stats, prep, signals, aggregate, EXITS, STRATS };

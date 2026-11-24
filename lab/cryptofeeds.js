@@ -67,5 +67,21 @@ async function tick1(sym) {
 }
 /* ticks([sym]) -> { sym: {p, src} } for the symbols that answered */
 async function ticks(syms) { const out = {}; await Promise.all(syms.map(async s => { const r = await tick1(s); if (r) out[s] = r; })); return out; }
+
+/* long history for research/backtests: Coinbase only (public, 300 bars per call, paged backwards). Returns ascending, de-duplicated candles. */
+const sleepMs = ms => new Promise(r => setTimeout(r, ms));
+async function history(sym, tf, days, opts) {
+  tf = TFS[tf] ? tf : '15m'; const g = TFS[tf].cb, per = 300 * g, end0 = Math.floor(Date.now() / 1000), start0 = end0 - Math.round(days * 86400), seen = new Map(), gap = (opts && opts.gapMs) || 260;
+  let calls = 0, fails = 0;
+  for (let e = end0; e > start0; e -= per) {
+    const s = Math.max(start0, e - per), url = 'https://api.exchange.coinbase.com/products/' + sym + '/candles?granularity=' + g + '&start=' + new Date(s * 1000).toISOString() + '&end=' + new Date(e * 1000).toISOString();
+    let rows = null;
+    for (let tries = 0; tries < 4 && !rows; tries++) { try { rows = await jget(url, 12000); } catch (err) { if (/HTTP 40[04]/.test(err.message)) { rows = []; } else await sleepMs(700 * (tries + 1)); } }
+    calls++; if (!rows) { if (++fails > 3) throw new Error('coinbase history failed for ' + sym + ' after ' + calls + ' calls'); } else rows.forEach(r => seen.set(r[0], { t: r[0], o: r[3], h: r[2], l: r[1], c: r[4], v: r[5] }));
+    await sleepMs(gap);
+  }
+  const out = [...seen.values()].sort((a, b) => a.t - b.t); if (out.length < 100) throw new Error('coinbase history too short for ' + sym + ' (' + out.length + ' bars)');
+  return out;
+}
 const status = () => ({ order: ORDER, sticky, health });
-module.exports = { candles, fromSource, ticks, probe, status, sources: Object.keys(SRC) };
+module.exports = { candles, fromSource, ticks, probe, status, history, sources: Object.keys(SRC) };
