@@ -67,9 +67,9 @@ if(SERVER&&!TABS.some(function(t){return t[0]==='bot'})){var _li=TABS.map(functi
 TABICON.bots='✦';
 var APPREADY,APP={mk:'ALL',chmk:'ALL',navStarted:false};
 /* nav groups: bottom bar shows the group; the sub-strip under the app bar moves between its pages */
-var GROUPS=[{id:'home',label:'Home',ic:'home',tabs:['home']},{id:'markets',label:'Markets',ic:'charts',tabs:['charts','market','setups']},{id:'bots',label:'Bots',ic:'bots',tabs:['bots','funds','lab','bot','overview','strategies']},{id:'orders',label:'Orders',ic:'trades',tabs:['trades']}];
-function grpOf(tab){for(var i=0;i<GROUPS.length;i++)if(GROUPS[i].tabs.indexOf(tab)>=0)return GROUPS[i];return null}
-var TABNAME={home:'Home',charts:'Charts',market:'Segments',setups:'Setups',bots:'My bots',funds:'Funds',lab:'AI Lab',bot:'Bot page',overview:'Paper books',strategies:'Strategies',trades:'Trades',bt:'Backtest',system:'System'};
+var GROUPS=[{id:'home',label:'Home',ic:'home',tabs:['home']},{id:'markets',label:'Markets',ic:'charts',tabs:['charts','market','setups']},{id:'bots',label:'Accounts',ic:'bots',tabs:['bots','lab','funds'],also:['bot','overview','strategies']},{id:'orders',label:'Orders',ic:'trades',tabs:['trades']}];
+function grpOf(tab){for(var i=0;i<GROUPS.length;i++)if(GROUPS[i].tabs.indexOf(tab)>=0||(GROUPS[i].also||[]).indexOf(tab)>=0)return GROUPS[i];return null}
+var TABNAME={home:'Home',charts:'Charts',market:'Segments',setups:'Setups',bots:'Accounts',funds:'Funds',lab:'AI Lab',bot:'Bot page',overview:'Paper books',strategies:'Strategies',trades:'Trades',bt:'Backtest',system:'System'};
 TABS.forEach(function(t){if(TABNAME[t[0]])t[1]=TABNAME[t[0]]});
 function renderTabs(){
   if(!APPREADY)return;
@@ -181,28 +181,58 @@ function posFetch(){if(liveFresh()&&PRO.pos)return;if(PRO.posBusy||Date.now()-(P
 function mkSelect(id,val,counts){return '<select id="'+id+'" aria-label="Market">'+MKOPT.map(function(o){return '<option value="'+o[0]+'"'+(val===o[0]?' selected':'')+'>'+o[1]+(counts&&counts[o[0]]!=null?' ('+counts[o[0]]+')':'')+'</option>'}).join('')+'</select>'}
 function scrolling(){return Date.now()-SCROLLAT<700}
 var DIRTY={};
+/* ---------- Accounts: every account (AI Lab bots + paper books) in one list, grouped by market so currencies never mix ---------- */
+(function(){var st=document.createElement('style');st.textContent='.acfil{display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px;scrollbar-width:none}.acfil::-webkit-scrollbar{display:none}.acfil button{flex:0 0 auto;padding:7px 13px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:13px;font-weight:600}.acfil button.on{background:var(--ink);color:var(--card);border-color:var(--ink)}.actot{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:4px 0 12px}.actot .x{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:12px 14px}.actot .k{font-size:12px;color:var(--ink2);font-weight:600}.actot .v{font-size:22px;font-weight:750;font-variant-numeric:tabular-nums;margin-top:2px;letter-spacing:-.3px}.actot .p{font-size:12.5px;font-weight:650;margin-top:2px}.acsec{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:14px 2px 6px}.acsec h3{margin:0;font-size:13px;letter-spacing:.3px}.acsec span{font-size:12px;color:var(--ink2);font-variant-numeric:tabular-nums}.aclist{border:1px solid var(--line);border-radius:16px;background:var(--card);overflow:hidden}.acr{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 14px;border:0;border-top:1px solid var(--line);background:none;color:var(--ink);font:inherit}.acr:first-child{border-top:0}.acr:active{background:var(--chip)}.acr .av{flex:0 0 auto;width:36px;height:36px;border-radius:11px;display:grid;place-items:center;color:#fff;font-weight:750;font-size:13px}.acr .av.pb{background:var(--chip);color:var(--ink);border:1px solid var(--line)}.acr .m{flex:1;min-width:0}.acr .m b{display:block;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.acr .m small{display:block;color:var(--ink2);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.acr .r{text-align:right;flex:0 0 auto}.acr .r b{display:block;font-size:15px;font-variant-numeric:tabular-nums}.acr .r small{font-size:12px;font-weight:650}.acr .chev{color:var(--ink2);font-size:18px;margin-left:-4px}';document.head.appendChild(st)})();
+var ACMK=[['ALL','All'],['IN','India ₹'],['CRYPTO','Crypto $'],['GLOBAL','Global $']],ACTY=[['ALL','All types'],['LAB','AI Lab bots'],['BOOK','Paper books']];
+try{APP.acmk=localStorage.getItem('paperbot4:acmk')||'ALL';APP.acty=localStorage.getItem('paperbot4:acty')||'ALL'}catch(e){APP.acmk='ALL';APP.acty='ALL'}
+var PBABBR={nse:'NI',india:'ET',fno:'FO',instocks:'IS',gstocks:'US',macro:'GL',crypto:'CR'};
+function accounts(){
+  var out=[],L=LAB.d,F=PRO.funds,FS={};(PRO.feeds&&PRO.feeds.slots||[]).forEach(function(s){FS[s.slot]=s});
+  if(L)L.bots.forEach(function(b){['IN','CRYPTO'].forEach(function(k){var bk=b.books&&b.books[k];if(!bk)return;var m=b.byBook&&b.byBook[k]||{};
+    out.push({kind:'LAB',mk:k,id:b.id,name:b.name,sub:'AI Lab · '+(BOTROLE[b.id]||b.desc||''),cur:bk.cur,eq:bk.equity,start:bk.start,pct:bk.pnlPct,open:m.open||0,trades:m.trades||0,col:BOTCOL[b.id]||'#555',attr:'data-tab="bot" data-bot="'+esc(b.id)+'" data-botmk-go="'+k+'"'})})});
+  if(F&&F.books)F.books.forEach(function(x){if(x.practice)return;var mk=SLOTMK[x.slot]||'IN',fs=FS[x.slot]||{},live=fs.feed==='live';
+    out.push({kind:'BOOK',mk:mk,id:x.slot,name:slotShort(x.label),sub:'Paper book · '+(!x.ready?'not running yet':live?'live':(fs.feed||'idle'))+(x.strategies?' · '+x.strategies.join(', '):''),cur:x.currency||(mk==='IN'?'₹':'$'),eq:x.ready?x.equity:null,start:x.start,pct:x.ready?x.pnlPct:null,open:x.open||0,trades:x.trades||0,ready:x.ready,attr:'data-goslot="'+esc(x.slot)+'"'})});
+  return out;
+}
+function acRow(a){
+  var av=a.kind==='LAB'?'<span class="av" style="background:'+a.col+'">'+esc(a.id)+'</span>':'<span class="av pb">'+esc(PBABBR[a.id]||a.id.slice(0,2).toUpperCase())+'</span>';
+  return '<button class="acr" '+a.attr+'>'+av+'<span class="m"><b>'+esc(a.name)+'</b><small>'+esc(a.sub)+(a.open?' · '+a.open+' open':'')+'</small></span><span class="r"><b>'+(a.eq==null?'–':money(a.cur,a.eq))+'</b><small class="'+plCls(a.pct)+'">'+(a.pct==null?'&nbsp;':plPct(a.pct))+'</small></span><span class="chev">›</span></button>';
+}
 function botsPaint(force){
   var el=$('#botsroot');if(!el)return;
-  if(!force){
-    if(scrolling()){DIRTY.bots=1;return}
-    var ae=document.activeElement;if(ae&&ae.tagName==='SELECT'&&el.contains(ae))return;
-  }
+  if(!force){if(scrolling()){DIRTY.bots=1;return}}
   DIRTY.bots=0;
-  var L=LAB.d,F=PRO.feeds,mk=LAB.mk,h='';
-  h+='<div class="sect"><h3>AI Lab bots</h3><select id="botmk" aria-label="Bot market"><option value="CRYPTO"'+(mk==='CRYPTO'?' selected':'')+'>Crypto ($)</option><option value="IN"'+(mk==='IN'?' selected':'')+'>India (₹)</option></select></div>';
-  h+='<button class="fundlink" data-tab="funds">Funds · what each bot and account holds, and what is in use <span>→</span></button>';
-  h+=L?'<div class="bgrid">'+L.bots.map(function(b){return botCard(b,mk)}).join('')+'</div>':'<div class="bgrid"><div class="skel" style="height:120px"></div><div class="skel" style="height:120px"></div></div>';
+  var all=accounts(),mk=APP.acmk,ty=APP.acty,h='';
+  var shown=all.filter(function(a){return (mk==='ALL'||a.mk===mk)&&(ty==='ALL'||a.kind===ty)});
+  /* totals per currency for what is shown (rupees and dollars are never added together) */
+  var T={};shown.forEach(function(a){if(a.eq==null)return;var t=T[a.cur]||(T[a.cur]={e:0,s:0,n:0});t.e+=a.eq;t.s+=a.start;t.n++});
+  h+='<div class="actot">'+(Object.keys(T).length?Object.keys(T).map(function(c){var t=T[c],pl=t.e-t.s;return '<div class="x"><div class="k">Total in '+(c==='₹'?'rupees':'dollars')+' · '+t.n+' accounts</div><div class="v">'+money(c,t.e)+'</div><div class="p '+plCls(pl)+'">'+(pl>=0?'+':'−')+c+num(Math.abs(pl),Math.abs(pl)<100?2:0)+' · '+plPct(t.s?pl/t.s:0)+'</div></div>'}).join(''):'<div class="skel" style="height:84px"></div><div class="skel" style="height:84px"></div>')+'</div>';
+  h+='<div class="acfil">'+ACMK.map(function(o){return '<button data-acmk="'+o[0]+'" class="'+(mk===o[0]?'on':'')+'">'+o[1]+'</button>'}).join('')+'</div>';
+  h+='<div class="acfil">'+ACTY.map(function(o){return '<button data-acty="'+o[0]+'" class="'+(ty===o[0]?'on':'')+'">'+o[1]+'</button>'}).join('')+'</div>';
+  [['IN','India · rupees'],['CRYPTO','Crypto · dollars'],['GLOBAL','Global stocks & commodities · dollars']].forEach(function(sec){
+    var A=shown.filter(function(a){return a.mk===sec[0]});if(!A.length)return;
+    var e=0,s=0,c=A[0].cur;A.forEach(function(a){if(a.eq!=null){e+=a.eq;s+=a.start}});
+    h+='<div class="acsec"><h3>'+sec[1]+'</h3><span>'+money(c,e)+' · <b class="'+plCls(e-s)+'">'+plPct(s?(e-s)/s:0)+'</b></span></div><div class="aclist">'+A.map(acRow).join('')+'</div>';
+  });
+  if(!all.length)h+='<div class="aclist"><div class="skel" style="height:62px"></div><div class="skel" style="height:62px;margin-top:2px"></div></div>';
+  else if(!shown.length)h+='<div class="card sub" style="margin-top:10px">No accounts match these filters.</div>';
+  /* open positions stay here until the Activity page replaces them */
   var ps=allPos(),counts={ALL:ps.length,IN:0,CRYPTO:0,GLOBAL:0};ps.forEach(function(p){if(counts[p.mk]!=null)counts[p.mk]++});
-  var shown=ps.filter(function(p){return APP.mk==='ALL'||p.mk===APP.mk});
-  h+='<div class="sect" id="botspos" style="scroll-margin-top:120px"><h3>Open positions · '+shown.length+'</h3>'+mkSelect('posmk',APP.mk,counts)+'</div>';
-  h+='<div class="card">'+(shown.length?shown.slice(0,40).map(posRow).join(''):'<div class="sub">'+((L&&PRO.pos)?'No open positions'+(APP.mk==='ALL'?'':' in this market')+'. Bots act on closed 15-minute bars when their market is open.':'Loading…')+'</div>')+'</div>';
-  h+='<div class="sect"><h3>Paper books · per market</h3><span class="hint">tap to open</span></div><div style="display:grid;gap:8px">'+(F&&F.slots?F.slots.map(slotCard).join(''):'<div class="skel" style="height:64px"></div><div class="skel" style="height:64px"></div>')+'</div>';
+  var sp=ps.filter(function(p){return APP.mk==='ALL'||p.mk===APP.mk});
+  h+='<div class="sect" id="botspos" style="scroll-margin-top:120px;margin-top:16px"><h3>Open positions · '+sp.length+'</h3>'+mkSelect('posmk',APP.mk,counts)+'</div>';
+  h+='<div class="card">'+(sp.length?sp.slice(0,40).map(posRow).join(''):'<div class="sub">'+((LAB.d&&PRO.pos)?'No open positions'+(APP.mk==='ALL'?'':' in this market')+'.':'Loading…')+'</div>')+'</div>';
+  h+='<div class="hint" style="margin:12px 2px">AI Lab bots and paper books are separate pots of paper money. Tap any account to see its page. Start amounts and sizing can be changed on <a href="#funds" data-tab="funds">Funds</a>.</div>';
   if(el.__h===h&&el.firstElementChild)return;
   el.__h=h;setHTML(el,h);
 }
+document.addEventListener('click',function(e){var t=e.target;if(!t.closest)return;var x;
+  if((x=t.closest('[data-acmk]'))){APP.acmk=x.getAttribute('data-acmk');try{localStorage.setItem('paperbot4:acmk',APP.acmk)}catch(er){}botsPaint(true);return}
+  if((x=t.closest('[data-acty]'))){APP.acty=x.getAttribute('data-acty');try{localStorage.setItem('paperbot4:acty',APP.acty)}catch(er){}botsPaint(true);return}
+});
 function botsTab(){
   if(!$('#botsroot')){$('#view').innerHTML='<div id="botsroot"></div>';botsPaint()}
   if(Date.now()-LAB.at>8000)labFetch();posFetch();
+  if(!PRO.fundsBusy&&!(liveFresh()&&PRO.funds)&&Date.now()-(PRO.fundsAt||0)>8000){PRO.fundsBusy=true;jf('/api/funds').then(function(j){PRO.funds=j;PRO.fundsAt=Date.now();PRO.fundsBusy=false;if(ui.tab==='bots')botsPaint()}).catch(function(){PRO.fundsBusy=false})}
   if(!PRO.feedsBusy&&Date.now()-PRO.feedsAt>10000){PRO.feedsBusy=true;jf('/api/feeds').then(function(j){PRO.feeds=j;PRO.feedsAt=Date.now();PRO.feedsBusy=false;if(ui.tab==='bots')botsPaint()}).catch(function(){PRO.feedsBusy=false})}
   if(PRO.botsSeen!==LAB.at){PRO.botsSeen=LAB.at;botsPaint()}
 }

@@ -644,7 +644,8 @@ function renderHeader(){
 var ctrlSig='';
 function render(){
   var solo=SERVER&&['home','bt','bots','funds','lab','charts','bot'].indexOf(ui.tab)>=0;
-  if((!snap&&!solo)||ui.hover)return;
+  if(ui.hover)return;
+  if(!snap&&!solo){var vw0=$('#view');if(vw0&&!vw0.querySelector('#ldg')){vw0.innerHTML='<div id="ldg" class="card sub">Loading…</div>';LASTVIEW=null;LASTFIRST=null}return}   /* never leave the previous tab\'s page on screen while this one loads */
   var ae=document.activeElement;if(ae&&/INPUT|SELECT/.test(ae.tagName)&&$('#view').contains(ae))return;
   if(snap){var sg2=[ui.paused,ui.speed,ui.nextAdaptive,ui.armReset,ui.mode,ui.slot,SERVER&&snap&&snap.server?snap.server.slots.length:0].join();if(sg2!==ctrlSig){ctrlSig=sg2;renderCtrl()}
   renderHeader()}
