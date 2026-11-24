@@ -10,7 +10,8 @@ const IS_OR = /openrouter\.ai/.test(BASE);
 const MODELS = (E.LLM_MODELS || 'nvidia/nemotron-3-ultra-550b-a55b:free,nvidia/nemotron-3.5-lightning:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free,openrouter/free').split(',').map(s => s.trim()).filter(Boolean).concat(E.LLM_FALLBACK ? [E.LLM_FALLBACK.trim()] : []);
 const RPM = +E.LLM_RPM || 18, TIMEOUT = +E.LLM_TIMEOUT_MS || 60000;
 const SHARE = { B: 0.50, C: 0.28, C0: 0.10, D: 0.07, R: 0.05 };   // daily budget split: B llm-only, C hybrid(memory), C0 hybrid control, D telegram parser, R reflection
-const st = { day: '', calls: 0, ok: 0, fail: 0, by: {}, models: {}, last: null, lastError: null, cap: +E.LLM_DAILY_CAP || 0, tier: null, tokens: 0, penaltyUntil: 0, lastCallAt: 0, keyInfo: null };
+const FORCED = /^(1|true|on|yes)$/i.test(E.LLM_PAUSED || '');   // env LLM_PAUSED=1 = hard pause that the UI cannot lift (works without an admin token)
+const st = { day: '', calls: 0, ok: 0, fail: 0, by: {}, models: {}, last: null, lastError: null, cap: +E.LLM_DAILY_CAP || 0, tier: null, tokens: 0, penaltyUntil: 0, lastCallAt: 0, keyInfo: null, paused: FORCED, pausedAt: 0, pausedBy: null, savedCalls: 0 };
 function today() { return new Date().toISOString().slice(0, 10); }
 function roll() { if (st.day !== today()) { st.day = today(); st.calls = 0; st.ok = 0; st.fail = 0; st.by = {}; st.tokens = 0; } }
 const configured = () => !!KEY;
@@ -23,7 +24,7 @@ async function discoverCap() {   // OpenRouter: free accounts (< $10 credit) get
   } catch (e) { st.cap = 45; st.tier = 'unknown'; }
 }
 function allow(bot) {   // budget governor: each bot gets its share of the day's cap
-  roll(); if (!KEY) return false; if (Date.now() < st.penaltyUntil) return false;
+  roll(); if (!KEY || st.paused) return false; if (Date.now() < st.penaltyUntil) return false;
   const cap = st.cap || 45; if (st.calls >= cap * 0.9) return false;
   return (st.by[bot] || 0) < Math.max(1, Math.floor(cap * (SHARE[bot] || 0.05)));
 }
@@ -32,9 +33,10 @@ function call(bot, messages, opt) { const p = chain.then(() => run(bot, messages
 async function run(bot, messages, opt) {
   roll(); const t0 = Date.now();
   if (!KEY) return { ok: false, error: 'no LLM key' };
+  if (st.paused) return { ok: false, error: 'LLM paused' };
   const gap = 60000 / RPM - (Date.now() - st.lastCallAt); if (gap > 0) await new Promise(r => setTimeout(r, gap));
   st.lastCallAt = Date.now(); st.calls++; st.by[bot] = (st.by[bot] || 0) + 1;
-  const mk = (maxTok, model) => { const b = { messages, temperature: opt.temperature == null ? 0.1 : opt.temperature, max_tokens: maxTok, response_format: { type: 'json_object' } }; if (IS_OR) { b.models = MODELS.slice(0, 3); b.model = model || MODELS[0]; } else b.model = model || MODELS[0]; return b; };
+  const mk = (maxTok, model) => { const b = { messages, temperature: opt.temperature == null ? 0.1 : opt.temperature, max_tokens: maxTok, response_format: { type: 'json_object' } }; if (IS_OR) { b.models = MODELS.slice(0, 3); b.model = model || MODELS[0]; if (E.LLM_REASONING !== 'off') b.reasoning = { effort: E.LLM_REASONING || 'low' }; } else b.model = model || MODELS[0]; return b; };
   const c = new AbortController(), to = setTimeout(() => c.abort(), TIMEOUT);
   try {
     let j, data = null, why = '', body = mk(opt.maxTokens || 700);
@@ -63,5 +65,8 @@ function extractJson(s) {
   const a = s.indexOf('{'), b = s.lastIndexOf('}'); if (a >= 0 && b > a) { try { return JSON.parse(s.slice(a, b + 1)); } catch (e) { /* ignore */ } }
   return null;
 }
-function status() { roll(); return { configured: configured(), base: BASE, models: MODELS, tier: st.tier, cap: st.cap, calls: st.calls, ok: st.ok, fail: st.fail, by: st.by, usedModels: st.models, last: st.last, lastError: st.lastError, tokens: st.tokens, backingOff: Date.now() < st.penaltyUntil, keyInfo: st.keyInfo, share: SHARE }; }
-module.exports = { call, allow, status, configured, discoverCap, extractJson, SHARE };
+function setPaused(on, by) { on = !!on || FORCED; if (on === st.paused) return st.paused; st.paused = on; st.pausedAt = Date.now(); st.pausedBy = by || null; return st.paused; }
+const isPaused = () => st.paused;
+function saved(n) { st.savedCalls += (n || 1); }   // LLM calls avoided (pause or pre-screen), shown in the UI as credits saved
+function status() { roll(); return { configured: configured(), paused: st.paused, forced: FORCED, pausedAt: st.pausedAt, pausedBy: st.pausedBy, savedCalls: st.savedCalls, base: BASE, models: MODELS, tier: st.tier, cap: st.cap, calls: st.calls, ok: st.ok, fail: st.fail, by: st.by, usedModels: st.models, last: st.last, lastError: st.lastError, tokens: st.tokens, backingOff: Date.now() < st.penaltyUntil, keyInfo: st.keyInfo, share: SHARE }; }
+module.exports = { call, allow, status, configured, discoverCap, extractJson, SHARE, setPaused, isPaused, saved };

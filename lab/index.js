@@ -4,18 +4,22 @@
  *   B  llm       — LLM-only: reads anonymised indicator snapshots, returns bull/bear case + decision (code sets size and enforces stops)
  *   C  hybrid    — takes only the rule bot's signals; the LLM may veto or shrink size; learns lessons from closed trades (reflection memory -> Obsidian vault)
  *   C0 control   — identical to C but with memory OFF (to prove whether "learning" helps)
+ *   Q  quality   — NO LLM. Takes the rule bot's signals only after a written checklist passes (anti-chase, room-to-move, correlation cap, cost); every entry/skip is logged with its reasons
  *   D  telegram  — follows a Telegram channel's calls and scores their accuracy on live prices (tg.js)
  * Nothing here is investment advice. Paper money only. LLM output cannot be back-tested on past data (the model may remember it), so only forward results count. */
-const CF = require('./cryptofeeds.js'), D = require('./data.js'), P = require('./paper.js'), LLM = require('./llm.js'), V = require('./vault.js'), TG = require('./tg.js');
+const FEOD = require('./fnodata.js'), UNI = require('./universe.js'), CF = require('./cryptofeeds.js'), D = require('./data.js'), P = require('./paper.js'), LLM = require('./llm.js'), V = require('./vault.js'), TG = require('./tg.js');
 const S = (() => { try { return require('../signals.js'); } catch (e) { return require('../../signals.js'); } })();
 const E = process.env, FNO = (() => { try { return require('../fno.js'); } catch (e) { try { return require('../../fno.js'); } catch (e2) { return null; } } })();
-const SYMS = (E.LAB_SYMS || '^NSEI,^NSEBANK,RELIANCE.NS,HDFCBANK.NS,BTC-USD,ETH-USD,SOL-USD,XRP-USD').split(',').map(s => s.trim()).filter(Boolean);
-const EXTRA = (E.CHART_SYMS || 'GC=F,SI=F,CL=F,INR=X,^GSPC,^IXIC,^N225,^INDIAVIX').split(',').map(s => s.trim()).filter(Boolean);
+const uniq = a => a.filter((x, i) => a.indexOf(x) === i);
+const SYMS = uniq((E.LAB_SYMS || '^NSEI,^NSEBANK,RELIANCE.NS,HDFCBANK.NS,BTC-USD,ETH-USD,SOL-USD,XRP-USD').split(',').map(s => s.trim()).filter(Boolean).concat(UNI.LAB_EXTRA));
+const EXTRA = uniq((E.CHART_SYMS || 'GC=F,SI=F,CL=F,INR=X,^GSPC,^IXIC,^N225,^INDIAVIX').split(',').map(s => s.trim()).filter(Boolean).concat(UNI.CHART_EXTRA)).filter(x => SYMS.indexOf(x) < 0);
 const POLL = +E.LAB_POLL_MS || 60000, MIN_CONF = +E.LAB_MIN_CONF || 0.6, STOP_ATR = +E.LAB_STOP_ATR || 1.5, TGT_ATR = +E.LAB_TARGET_ATR || 2.5, NOENTRY_MIN = +E.LAB_NO_ENTRY_MIN || 30, MAXHOLD = +E.LAB_MAX_HOLD_BARS || 48;
 const MAX_COST_R = +E.LAB_MAX_COST_R || 0;   // 0 = off. Skip entries whose round-trip cost exceeds this many R (backtests show costs, not signals, are what lose money on 15m bars)
 const LESSON_N = +E.LESSON_MIN_N || 20, LESSON_DAYS = +E.LESSON_DAYS || 60, ON = (E.LAB || 'on') !== 'off';
-const TFS = 900, BOTS = ['A', 'B', 'C', 'C0'];
-const BOT_INFO = { A: ['Rule bot', 'EMA20/50 + ADX + RSI trend rule, ATR stop/target. The benchmark.'], B: ['LLM-only', 'LLM analyses an anonymised snapshot and decides. Code sets size and enforces stops.'], C: ['Hybrid + memory', 'Rule signals only; LLM can veto/shrink; learns lessons from closed trades.'], C0: ['Hybrid control', 'Same as Hybrid with memory OFF — shows whether memory helps.'] };
+const TFS = 900, BOTS = ['A', 'B', 'C', 'C0', 'Q'];
+const QX = { ext: +E.Q_MAX_EXT_ATR || 1.75, room: +E.Q_MIN_ROOM_ATR || 0.6, cap: +E.Q_MAX_SAME_DIR || 2, adx: +E.Q_MIN_ADX || 20 };   // Q gates (hypotheses from the first 23 independent trades; the forward test decides)
+const PRESCREEN = (E.LLM_PRESCREEN || 'on') !== 'off';   // do not spend an LLM call on a flat, directionless chart (bot B would say 'flat' anyway)
+const BOT_INFO = { Q: ['Quality gate', 'Rule signals only after a written checklist passes (no chasing, room to move, correlation cap). No LLM, no credits.'], A: ['Rule bot', 'EMA20/50 + ADX + RSI trend rule, ATR stop/target. The benchmark.'], B: ['LLM-only', 'LLM analyses an anonymised snapshot and decides. Code sets size and enforces stops.'], C: ['Hybrid + memory', 'Rule signals only; LLM can veto/shrink; learns lessons from closed trades.'], C0: ['Hybrid control', 'Same as Hybrid with memory OFF — shows whether memory helps.'] };
 let LIB = null; try { LIB = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'replay', 'strategy_library.json'), 'utf8')).specs; } catch (e) { try { LIB = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'replay', 'strategy_library.json'), 'utf8')).specs; } catch (e2) { LIB = null; } }
 
 const st = { bots: {}, lessons: [], lessonSeq: 0, lastBar: {}, cool: {}, decisions: [], tg: { lastId: 0, signals: [], seq: 0, lastPoll: 0, err: null, baselined: false, polls: 0, newMsgs: 0 }, started: Date.now(), vaultAt: 0 };
@@ -72,7 +76,7 @@ function lessonEvidence(tr) {   // every closed rule-bot trade is out-of-sample 
 }
 
 /* ---------- decision log + vault notes ---------- */
-function logDec(bot, sym, kind, text, extra) { st.decisions.push(Object.assign({ t: Date.now(), bot, sym, kind, text: String(text).slice(0, 220) }, extra || {})); if (st.decisions.length > 300) st.decisions.splice(0, st.decisions.length - 300); mem.dirty = true; }
+function logDec(bot, sym, kind, text, extra) { st.decisions.push(Object.assign({ t: Date.now(), bot, sym, kind, text: String(text).slice(0, 330) }, extra || {})); if (st.decisions.length > 300) st.decisions.splice(0, st.decisions.length - 300); mem.dirty = true; }
 const fmtT = t => new Date(t * 1000).toISOString().replace('T', ' ').slice(0, 16) + 'Z';
 const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
 function tradeNote(t) {
@@ -99,9 +103,10 @@ function vaultSync(force) {
   V.put('State/lab.json', JSON.stringify(exportState()));
 }
 const KEEP = ['bots', 'lessons', 'lessonSeq', 'lastBar', 'cool', 'decisions', 'tg'];
-function exportState() { const o = { v: 1 }; KEEP.forEach(k => { o[k] = st[k]; }); return o; }
+function exportState() { const o = { v: 1 }; KEEP.forEach(k => { o[k] = st[k]; }); o.llmPaused = LLM.isPaused(); return o; }
 function importState(o) {
   if (!o || o.v !== 1) return false;
+  if (typeof o.llmPaused === 'boolean') LLM.setPaused(o.llmPaused, 'restored');
   BOTS.forEach(id => { if (o.bots && o.bots[id]) st.bots[id] = Object.assign(P.newBot(id, BOT_INFO[id][0], BOT_INFO[id][1]), o.bots[id]); });
   ['lessons', 'lessonSeq', 'lastBar', 'cool', 'decisions'].forEach(k => { if (o[k] != null) st[k] = o[k]; }); if (o.tg) st.tg = Object.assign(st.tg, o.tg);
   BOTS.forEach(id => st.bots[id].trades.forEach(t => mem.seenTrades.add(t.id))); return true;
@@ -129,7 +134,7 @@ function closeFor(botId, p, price, reason) { const tr = P.close(st.bots[botId], 
 function onClosed(tr) {
   logDec(tr.bot, tr.sym, 'exit', tr.side + ' ' + tr.name + ' ' + tr.reason + ' ' + r2(tr.r) + 'R'); mem.dirty = true;
   if (tr.bot === 'A') { lessonEvidence(tr); lessonCheck(); }
-  if (tr.bot === 'C' && LLM.configured()) tasks.push({ kind: 'reflect', bot: 'R', tr, created: Date.now() });
+  if (tr.bot === 'C' && LLM.configured() && !LLM.isPaused()) tasks.push({ kind: 'reflect', bot: 'R', tr, created: Date.now() });
 }
 
 /* ---------- LLM tasks ---------- */
@@ -182,7 +187,16 @@ async function runTask(t) {
   }
 }
 const PRI = { review: 0, manageB: 1, tgparse: 2, entryB: 3, reflect: 4 };
+function dropQueued(why) {   // remove every queued LLM task and settle the books so nothing is left 'parsing' / 'pending review'
+  const n = tasks.length; tasks.splice(0).forEach(t => { if (t.kind === 'review') st.bots[t.bot].stats.unreviewed++; if (t.kind === 'entryB') st.bots.B.stats.skipped++; if (t.kind === 'tgparse') { t.sig.state = 'unparsed'; t.sig.note = why; t.sig.skip = true; } });
+  if (n) LLM.saved(n); return n;
+}
+function setLLMPaused(on, by) {
+  const was = LLM.isPaused(); LLM.setPaused(on, by || 'ui'); const now_ = LLM.isPaused(); if (was !== now_) { logDec('SYS', '-', 'llm', now_ ? 'LLM bots PAUSED (' + (by || 'ui') + ') — no credits are spent; open B/C/C0 trades still exit on their stop/target' : 'LLM bots RESUMED (' + (by || 'ui') + ')'); if (now_) dropQueued('LLM paused'); mem.dirty = true; save(); }
+  return LLM.status();
+}
 async function drain() {
+  if (LLM.isPaused()) { dropQueued('LLM paused'); return; }
   if (mem.draining) return; mem.draining = true;
   try {
     let n = 0; while (tasks.length && n < 40) {
@@ -192,6 +206,27 @@ async function drain() {
       try { await runTask(t); } catch (e) { console.error('lab task', t.kind, e.message); }
     }
   } finally { mem.draining = false; }
+}
+
+/* ---------- Q: quality-gate bot (no LLM). Same signal as A, taken only if every check passes; the full checklist is the 'reason'. ---------- */
+function qChecks(sym, meta, side, f) {
+  const sd = side > 0 ? 'LONG' : 'SHORT', ext = side * f.vsEma20 / f.atrPct, room = side > 0 ? f.toHighAtr : f.toLowAtr, ck = [];   // ext: how far price already ran past EMA20 in the trade direction, in ATR; room: distance to the 20-bar extreme in ATR
+  const same = st.bots.Q.pos.filter(p => p.book === meta.book && p.side === side).length;
+  ck.push({ ok: f.adx >= QX.adx, t: 'trend strength ADX ' + f.adx + (f.adx >= QX.adx ? ' ≥ ' : ' < ') + QX.adx });
+  ck.push({ ok: ext <= QX.ext, t: 'not chasing: ' + r2(ext) + ' ATR beyond EMA20' + (ext <= QX.ext ? ' ≤ ' : ' > ') + QX.ext });
+  ck.push({ ok: room >= QX.room, t: (side > 0 ? 'room below 20-bar high ' : 'room above 20-bar low ') + r2(room) + ' ATR' + (room >= QX.room ? ' ≥ ' : ' < ') + QX.room + (room < QX.room ? ' (entering at the extreme)' : '') });
+  ck.push({ ok: same < QX.cap, t: 'correlation cap: ' + same + ' ' + sd + ' ' + meta.book + ' open' + (same < QX.cap ? ' < ' : ' ≥ ') + QX.cap });
+  return ck;
+}
+function qEntry(sym, meta, side, f) {
+  const ck = qChecks(sym, meta, side, f), bad = ck.filter(c => !c.ok), line = ck.map(c => (c.ok ? '✔ ' : '✘ ') + c.t).join(' · ');
+  if (bad.length) {   // log a rejection once per symbol per hour (or when the reasons change) so the decision log is not flooded by a persistent signal
+    const txt = (side > 0 ? 'LONG' : 'SHORT') + ' rejected: ' + bad.map(c => c.t).join('; '), k = mem.qskip = mem.qskip || {}, prev = k[sym];
+    if (!prev || prev.txt.replace(/[\d.]+/g, '#') !== txt.replace(/[\d.]+/g, '#') || Date.now() - prev.at > 3600e3) { k[sym] = { txt, at: Date.now() }; st.bots.Q.stats.skipped++; logDec('Q', sym, 'skip', txt); }
+    return null;
+  }
+  const ctx = FEOD.context(sym);
+  return openFor('Q', sym, meta, side, f, 'checklist passed · ' + line + (ctx ? ' · ' + ctx : ''), { checks: ck.map(c => c.t) });
 }
 
 /* ---------- main cycle ---------- */
@@ -213,9 +248,12 @@ async function pollSymbol(sym) {
   const sig = s.sig;
   if (sig !== 0) {
     st.bots.A.stats.signals++;
-    ['A', 'C', 'C0'].forEach(id => { const bot = st.bots[id]; if (bot.pos.some(p => p.sym === sym)) return; if ((st.cool[id + '|' + sym] || 0) + 4 * TFS > lastClosed.t) return; if (id === 'A') openFor('A', sym, meta, sig, f, 'rule: ' + f.regime + ' RSI ' + f.rsi + ' ADX ' + f.adx, {}); else tasks.push({ kind: 'review', bot: id, sym, meta, f, side: sig, created: Date.now() }); });
+    ['A', 'C', 'C0'].forEach(id => { const bot = st.bots[id]; if (bot.pos.some(p => p.sym === sym)) return; if ((st.cool[id + '|' + sym] || 0) + 4 * TFS > lastClosed.t) return; if (id === 'A') openFor('A', sym, meta, sig, f, 'rule: ' + f.regime + ' RSI ' + f.rsi + ' ADX ' + f.adx, {}); else if (LLM.isPaused()) { st.bots[id].stats.unreviewed++; LLM.saved(); } else tasks.push({ kind: 'review', bot: id, sym, meta, f, side: sig, created: Date.now() }); });
+    if (!st.bots.Q.pos.some(p => p.sym === sym) && (st.cool['Q|' + sym] || 0) + 4 * TFS <= lastClosed.t) qEntry(sym, meta, sig, f);
   }
-  if (!st.bots.B.pos.some(p => p.sym === sym)) { if (!tasks.some(t => t.kind === 'entryB' && t.sym === sym) && (st.cool['B|' + sym] || 0) + 2 * TFS <= lastClosed.t) tasks.push({ kind: 'entryB', bot: 'B', sym, meta, f, created: Date.now() }); }
+  const flat = PRESCREEN && f.regime === 'range' && f.adx < 18 && f.dayPos > 0.15 && f.dayPos < 0.85;   // directionless middle of the range: B answers 'flat' ~always, so do not pay for it
+  if (!st.bots.B.pos.some(p => p.sym === sym)) { if (LLM.isPaused() || flat) { LLM.saved(); if (!LLM.isPaused()) mem.prescreened = (mem.prescreened || 0) + 1; } else if (!tasks.some(t => t.kind === 'entryB' && t.sym === sym) && (st.cool['B|' + sym] || 0) + 2 * TFS <= lastClosed.t) tasks.push({ kind: 'entryB', bot: 'B', sym, meta, f, created: Date.now() }); }
+  else if (LLM.isPaused()) LLM.saved();
   else if (!tasks.some(t => t.kind === 'manageB' && t.sym === sym)) tasks.push({ kind: 'manageB', bot: 'B', sym, meta, f, created: Date.now() });
 }
 async function tgTick() {
@@ -237,7 +275,7 @@ function addSignal(text, msgTs, src, id) {
   const tgS = st.tg, t = String(text || '').trim(); if (!t) return null;
   const h = require('crypto').createHash('sha256').update(t).digest('hex').slice(0, 12); if (tgS.signals.some(s => s.hash === h && Date.now() - s.seenAt < 6 * 3600e3)) return null;
   const parsed = TG.parseRule(t), sig = TG.mkSignal(id || ('m' + (++tgS.seq)), parsed, t, msgTs, Date.now(), src); if (parsed) sig.note = parsed.insane || 'parsed by rules';
-  if (!parsed) { if (!/\b(BUY|SELL|LONG|SHORT)\b/i.test(t) || !/\d/.test(t)) { sig.state = 'unparsed'; sig.note = 'not a trade call'; sig.skip = true; return null; } sig.state = 'parsing'; tasks.push({ kind: 'tgparse', bot: 'D', text: t, sig, created: Date.now() }); }
+  if (!parsed) { if (!/\b(BUY|SELL|LONG|SHORT)\b/i.test(t) || !/\d/.test(t)) { sig.state = 'unparsed'; sig.note = 'not a trade call'; sig.skip = true; return null; } if (LLM.isPaused()) { sig.state = 'unparsed'; sig.note = 'LLM paused (rules could not parse it)'; sig.skip = true; LLM.saved(); return null; } sig.state = 'parsing'; tasks.push({ kind: 'tgparse', bot: 'D', text: t, sig, created: Date.now() }); }
   tgS.signals.push(sig); if (tgS.signals.length > 400) tgS.signals.splice(0, tgS.signals.length - 400); mem.dirty = true; return sig;
 }
 let timer = null, busy = false;
@@ -257,6 +295,7 @@ async function start(opts) {
   try { const saved = store && await store.load('lab'); if (saved) importState(saved); } catch (e) { console.error('lab restore', e.message); }
   if (!st.bots.A.trades.length && V.configured()) { try { const t = await V.get('State/lab.json'); if (t) { importState(JSON.parse(t)); console.log('lab state restored from vault'); } } catch (e) { console.error('lab vault restore', e.message); } }
   await LLM.discoverCap(); console.log('lab on · symbols', SYMS.join(','), '· LLM', LLM.configured() ? 'key set' : 'NO KEY', '· vault', V.configured() ? 'on' : 'off', '· telegram', TG.CHAN || 'none');
+  setTimeout(() => FEOD.refresh().catch(() => {}), 25000); setInterval(() => FEOD.refresh().catch(() => {}), 30 * 60000);   // NSE end-of-day F&O files (free); cached, fails soft
   setTimeout(tick, 4000); timer = setInterval(tick, POLL);
 }
 async function shutdown() { try { await save(); if (V.configured()) { vaultSync(); await V.flush('Lab shutdown sync'); } } catch (e) { /* best effort */ } }
@@ -275,7 +314,7 @@ function snapshot() {
   BOTS.forEach(id => { const b = st.bots[id]; b.pos.forEach(p => { const last = PXS[p.sym] != null ? PXS[p.sym] : p.entry; positions.push({ bot: id, id: p.id, sym: p.sym, name: p.name, cur: p.cur, side: p.side > 0 ? 'LONG' : 'SHORT', entry: p.entry, stop: p.stop, target: p.target, last, r: p.riskAmt ? p.side * (last - p.entry) * p.qty / p.riskAmt : 0, pnl: p.side * (last - p.entry) * p.qty - p.feeIn, openT: p.openT, why: p.why }); }); b.trades.slice(-80).forEach(t => trades.push(Object.assign({}, t, { extra: undefined, f: t.extra && t.extra.f }))); });
   trades.sort((a, b) => b.closeT - a.closeT);
   const tgs = st.tg.signals.slice(-60).reverse().map(s => ({ id: s.id, text: s.text, seenAt: s.seenAt, state: s.state, outcome: s.outcome, r: s.r, hits: s.hits, note: s.note, exitReason: s.exitReason, entry: s.entry, kind: s.p && s.p.kind, und: s.p && s.p.undName, strike: s.p && s.p.strike, opt: s.p && s.p.optType, side: s.p && s.p.side, sl: s.p && s.p.sl, targets: s.p && s.p.targets, entryType: s.p && s.p.entryType, entryLo: s.p && s.p.entryLo, src: s.src, via: s.p && s.p.llm ? 'llm' : 'rules' }));
-  return { on: ON, now: Date.now(), cfg: { maxCostR: MAX_COST_R, symbols: SYMS, riskPct: P.CFG.riskPct * 100, minConf: MIN_CONF, stopAtr: STOP_ATR, targetAtr: TGT_ATR, lessonMinN: LESSON_N, books: P.CFG.start, feeBps: P.CFG.feeBps, slipBps: P.CFG.slipBps, noEntryMin: NOENTRY_MIN }, llm: LLM.status(), vault: V.status(), tg: { channel: TG.CHAN || null, err: st.tg.err, polls: st.tg.polls, newMsgs: st.tg.newMsgs, lastPoll: st.tg.lastPoll, baselined: st.tg.baselined, lastId: st.tg.lastId, score: tgScore(), signals: tgs }, bots: ms, positions, trades: trades.slice(0, 120), curves: BOTS.reduce((o, id) => { o[id] = st.bots[id].curve; return o; }, {}),
+  return { on: ON, now: Date.now(), cfg: { maxCostR: MAX_COST_R, symbols: SYMS, riskPct: P.CFG.riskPct * 100, minConf: MIN_CONF, stopAtr: STOP_ATR, targetAtr: TGT_ATR, lessonMinN: LESSON_N, books: P.CFG.start, feeBps: P.CFG.feeBps, slipBps: P.CFG.slipBps, noEntryMin: NOENTRY_MIN }, llm: Object.assign(LLM.status(), { prescreened: mem.prescreened || 0, prescreen: PRESCREEN }), qcfg: QX, vault: V.status(), tg: { channel: TG.CHAN || null, err: st.tg.err, polls: st.tg.polls, newMsgs: st.tg.newMsgs, lastPoll: st.tg.lastPoll, baselined: st.tg.baselined, lastId: st.tg.lastId, score: tgScore(), signals: tgs }, bots: ms, positions, trades: trades.slice(0, 120), curves: BOTS.reduce((o, id) => { o[id] = st.bots[id].curve; return o; }, {}),
     scan: Object.values(scan).map(s => ({ sym: s.sym, name: s.name, cur: s.cur, price: s.price, t: s.t, open: s.open, stale: s.stale, err: s.err, regime: s.f && s.f.regime, rsi: s.f && s.f.rsi, adx: s.f && s.f.adx, atrPct: s.f && s.f.atrPct, sig: s.sig, lib: s.f && s.f.lib })), decisions: st.decisions.slice(-80).reverse(), lessons: st.lessons.map(l => ({ id: l.id, status: l.status, claim: l.claim, cond: condText(l.cond), support: l.support, contra: l.contra, meanR: (l.support + l.contra) ? r2(l.sumR / (l.support + l.contra)) : null, expires: l.expires, retiredWhy: l.retiredWhy })), queue: tasks.length, queueKinds: tasks.reduce((o, t) => { o[t.kind] = (o[t.kind] || 0) + 1; return o; }, {}), uptimeMin: Math.round((Date.now() - st.started) / 60000) };
 }
 async function chart(sym, tf) {
@@ -285,7 +324,7 @@ async function chart(sym, tf) {
   return { sym, name: meta.name, cur: meta.cur, tf, shift: sh, src: r.src, candles: r.candles.slice(-500), markers, lines, open: D.sessionOpen(meta), now: Date.now() };
 }
 async function prices() {
-  const list = SYMS.concat(EXTRA.filter(x => SYMS.indexOf(x) < 0)); const out = await Promise.all(list.map(s => D.quote(s).catch(() => null)));
+  const list = SYMS.concat(EXTRA.filter(x => SYMS.indexOf(x) < 0)); const out = await Promise.all(list.map(s => D.quote(s, SYMS.indexOf(s) < 0).catch(() => null)));
   return out.map((q, i) => q || { sym: list[i], name: D.inst(list[i]).name, err: true });
 }
 const chartSymbols = () => SYMS.concat(EXTRA.filter(x => SYMS.indexOf(x) < 0)).map(s => ({ sym: s, name: D.inst(s).name, lab: SYMS.indexOf(s) >= 0 }));
@@ -324,4 +363,5 @@ function funds() {
   });
   return out;
 }
-module.exports = { start, tick, snapshot, funds, liveTick, liveLite, chart, prices, chartSymbols, addSignal, shutdown, flushNow, features, ruleSignal, cleanCond, matches, state: st, tasks, TGparse: TG.parseRule };
+const universe = () => Object.assign(UNI.overview(SYMS, SYMS.concat(EXTRA)), { lab: SYMS, charts: EXTRA });
+module.exports = { universe, universeSearch: UNI.search, fnoEod: async () => { await FEOD.refresh(); return FEOD.eod(); }, fnoDebug: FEOD.debug, fnoRefresh: () => FEOD.refresh(true), qChecks, setLLMPaused, start, tick, snapshot, funds, liveTick, liveLite, chart, prices, chartSymbols, addSignal, shutdown, flushNow, features, ruleSignal, cleanCond, matches, state: st, tasks, TGparse: TG.parseRule };

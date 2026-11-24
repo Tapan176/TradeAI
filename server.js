@@ -638,6 +638,9 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/feeds') return send(200, { yahoo: LABD.ygStatus(), upstox: UPX.status(), indexSource: feeds._idxSrc || null, crypto: CF.status(), indexMissing: feeds._idxMissing || [], chainError: feeds._chainErr || null, slots: summary() });
   if (url.pathname === '/api/crypto-probe') return send(200, { probe: await CF.probe(url.searchParams.get('sym') || 'BTC-USD'), status: CF.status() });
   if (url.pathname === '/api/lab') return send(200, LAB.snapshot());
+  if (url.pathname === '/api/universe') return send(200, LAB.universe());
+  if (url.pathname === '/api/universe/search') { try { return send(200, await LAB.universeSearch(url.searchParams.get('q') || '')); } catch (e) { return send(502, { error: e.message }); } }
+  if (url.pathname === '/api/fno/eod') { try { if (url.searchParams.get('debug')) return send(200, LAB.fnoDebug()); if (url.searchParams.get('refresh') && authed(req, url)) await LAB.fnoRefresh(); return send(200, await LAB.fnoEod()); } catch (e) { return send(502, { error: e.message }); } }
   if (url.pathname === '/api/lab/symbols') return send(200, LAB.chartSymbols());
   if (url.pathname === '/api/lab/prices') { try { return send(200, await LAB.prices()); } catch (e) { return send(502, { error: e.message }); } }
   if (url.pathname === '/api/candles') { try { return send(200, await LAB.chart(url.searchParams.get('sym') || '^NSEI', url.searchParams.get('tf') || '15m')); } catch (e) { return send(502, { error: String(e.message || e) }); } }
@@ -646,6 +649,13 @@ const server = http.createServer(async (req, res) => {
     let b = ''; for await (const ch of req) { b += ch; if (b.length > 20000) break; }
     let text = b; try { const j = JSON.parse(b); text = j.text || j.message || b; } catch (e) { /* raw text */ }
     const sg = LAB.addSignal(text, Date.now() / 1000, 'manual'); return send(200, { accepted: !!sg, state: sg && sg.state, note: sg && sg.note });
+  }
+  if (req.method === 'POST' && url.pathname === '/api/lab/llm') {   // pause / resume every LLM-backed bot (B, C, C0, reflection, Telegram parsing). Admin-gated.
+    if (!authed(req, url)) return send(401, { error: TOKEN ? 'missing/invalid ADMIN_TOKEN' : 'ADMIN_TOKEN is not set on the server (set LLM_PAUSED=1 instead to pause)' });
+    let b = ''; for await (const ch of req) { b += ch; if (b.length > 2000) break; }
+    let on = url.searchParams.get('paused'); try { const j = JSON.parse(b || '{}'); if (j.paused != null) on = j.paused; } catch (e) { /* query param */ }
+    if (on == null) return send(400, { error: 'send {"paused":true|false}' });
+    const r = LAB.setLLMPaused(on === true || on === 'true' || on === '1' || on === 1, 'admin'); return send(200, { ok: true, paused: r.paused, forced: r.forced });
   }
   if (req.method === 'POST' && url.pathname === '/api/lab/sync') { if (!authed(req, url)) return send(401, { error: 'missing/invalid ADMIN_TOKEN' }); try { const r = await LAB.flushNow(); await vaultStates('Manual state sync'); return send(200, { ok: true, r }); } catch (e) { return send(500, { error: e.message }); } }
 

@@ -11,7 +11,7 @@ async function jget(url, ms) {
 }
 const TF = { '5m': { y: '5m', r: '5d', cb: 300, ks: 5, s: 300 }, '15m': { y: '15m', r: '10d', cb: 900, ks: 15, s: 900 }, '1h': { y: '60m', r: '1mo', cb: 3600, ks: 60, s: 3600 }, '1d': { y: '1d', r: '1y', cb: 86400, ks: 1440, s: 86400 } };
 const KRAKEN = { 'BTC-USD': 'XBTUSD', 'ETH-USD': 'ETHUSD', 'SOL-USD': 'SOLUSD', 'XRP-USD': 'XRPUSD', 'DOGE-USD': 'DOGEUSD' };
-const NAMES = { '^NSEI': 'NIFTY 50', '^NSEBANK': 'BANK NIFTY', '^BSESN': 'SENSEX', '^CNXIT': 'NIFTY IT', 'BTC-USD': 'Bitcoin', 'ETH-USD': 'Ethereum', 'SOL-USD': 'Solana', 'XRP-USD': 'XRP', 'DOGE-USD': 'Dogecoin', 'ADA-USD': 'Cardano', 'AVAX-USD': 'Avalanche', 'LINK-USD': 'Chainlink', 'GC=F': 'Gold', 'SI=F': 'Silver', 'HG=F': 'Copper', 'CL=F': 'WTI crude', 'BZ=F': 'Brent crude', 'NG=F': 'Natural gas', 'INR=X': 'USD/INR', 'EURUSD=X': 'EUR/USD', 'GBPUSD=X': 'GBP/USD', 'USDJPY=X': 'USD/JPY', 'DX-Y.NYB': 'Dollar index', '^GSPC': 'S&P 500', '^IXIC': 'Nasdaq', '^DJI': 'Dow Jones', '^N225': 'Nikkei 225', '^FTSE': 'FTSE 100', '^GDAXI': 'DAX', '^HSI': 'Hang Seng', 'GOLDBEES.NS': 'Gold BeES' };
+const NAMES = { '^DJI': 'Dow Jones', '^RUT': 'Russell 2000', '^FTSE': 'FTSE 100', '^GDAXI': 'DAX', '^HSI': 'Hang Seng', 'EURUSD=X': 'EUR/USD', 'NIFTYBEES.NS': 'Nifty BeES', 'GOLDBEES.NS': 'Gold BeES', 'AAPL': 'Apple', 'NVDA': 'Nvidia', 'SPY': 'S&P 500 ETF', 'DOGE-USD': 'Dogecoin', 'ICICIBANK.NS': 'ICICI Bank', 'TCS.NS': 'TCS', 'INFY.NS': 'Infosys', 'SBIN.NS': 'SBI',  '^NSEI': 'NIFTY 50', '^NSEBANK': 'BANK NIFTY', '^BSESN': 'SENSEX', '^CNXIT': 'NIFTY IT', 'BTC-USD': 'Bitcoin', 'ETH-USD': 'Ethereum', 'SOL-USD': 'Solana', 'XRP-USD': 'XRP', 'DOGE-USD': 'Dogecoin', 'ADA-USD': 'Cardano', 'AVAX-USD': 'Avalanche', 'LINK-USD': 'Chainlink', 'GC=F': 'Gold', 'SI=F': 'Silver', 'HG=F': 'Copper', 'CL=F': 'WTI crude', 'BZ=F': 'Brent crude', 'NG=F': 'Natural gas', 'INR=X': 'USD/INR', 'EURUSD=X': 'EUR/USD', 'GBPUSD=X': 'GBP/USD', 'USDJPY=X': 'USD/JPY', 'DX-Y.NYB': 'Dollar index', '^GSPC': 'S&P 500', '^IXIC': 'Nasdaq', '^DJI': 'Dow Jones', '^N225': 'Nikkei 225', '^FTSE': 'FTSE 100', '^GDAXI': 'DAX', '^HSI': 'Hang Seng', 'GOLDBEES.NS': 'Gold BeES' };
 
 /* instrument metadata: which book/session an instrument trades in */
 function inst(sym) {
@@ -132,8 +132,8 @@ async function history15(sym, days) {
 
 /* number of fully closed bars at `now` (a bar is closed when its end time has passed) */
 function closedBars(cs, tf, now) { const s = TF[tf].s, n = Math.floor((now || Date.now()) / 1000); let k = cs.length; while (k > 0 && cs[k - 1].t + s > n) k--; return cs.slice(0, k); }
-async function quote(sym) {
-  const m = inst(sym), [d, i] = await Promise.all([candles(sym, '1d', 120000).catch(() => null), candles(sym, '15m', 30000).catch(() => null)]);
+async function quote(sym, slow) {   // slow = chart-only symbols: longer cache so a wide watchlist cannot starve the bots of Yahoo capacity
+  const m = inst(sym), [d, i] = await Promise.all([candles(sym, '1d', slow ? 600000 : 120000).catch(() => null), candles(sym, '15m', slow ? 120000 : 30000).catch(() => null)]);
   const last = i && i.candles.length ? i.candles[i.candles.length - 1] : (d && d.candles.length ? d.candles[d.candles.length - 1] : null);
   if (!last) throw new Error('no quote for ' + sym);
   let prev = null;

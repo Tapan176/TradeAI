@@ -714,7 +714,7 @@ window.addEventListener('resize',function(){if(snap)drawCharts()});
 
 /* ===== AI Lab + Charts tabs (server mode only). Self-updating: render() leaves these two tabs alone. ===== */
 var LAB={d:null,at:0,busy:false,mk:'IN',ch:{sym:'^NSEI',tf:'15m',ema:true,mk:true,data:null,at:0,busy:false,key:''},px:null,pxAt:0,syms:null,tgmsg:''};
-var BOTCOL={A:'#0072B2',B:'#E69F00',C:'#009E73',C0:'#CC79A7'},MKT={IN:'India (₹)',CRYPTO:'Crypto ($)'};
+var BOTCOL={A:'#0072B2',B:'#E69F00',C:'#009E73',C0:'#CC79A7',Q:'#D55E00'},MKT={IN:'India (₹)',CRYPTO:'Crypto ($)'};
 function lpct(x,d){return x==null?'–':(x*100).toFixed(d==null?1:d)+'%'}
 function lsgn(x,d){return x==null?'–':(x>0?'+':'')+x.toFixed(d==null?2:d)}
 function cls2(x){return x==null?'':x>0?'up':x<0?'dn':''}
@@ -722,17 +722,24 @@ function ago(ms){if(!ms)return 'never';var s=Math.round((Date.now()-ms)/1000);re
 function istStr(t){var d=new Date((t+19800)*1000);return d.toISOString().slice(5,16).replace('T',' ')}
 function labFetch(){
   if(LAB.busy)return;LAB.busy=true;
-  fetch('/api/lab',{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){LAB.d=j;LAB.at=Date.now();LAB.busy=false;if(ui.tab==='lab')labPaint()}).catch(function(){LAB.busy=false});
+  fetch('/api/lab',{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){LAB.d=j;LAB.at=Date.now();LAB.busy=false;if(ui.tab==='lab')labPaint();if(typeof sbRefreshLLM==='function'&&typeof SB!=='undefined'&&SB.open)sbRefreshLLM()}).catch(function(){LAB.busy=false});
 }
 function labToken(){var t=null;try{t=sessionStorage.getItem('pbtoken')}catch(e){}if(!t){t=window.prompt('Admin token (ADMIN_TOKEN env var on your server):');if(t){try{sessionStorage.setItem('pbtoken',t)}catch(e){}}}return t}
+function llmSet(on){
+  var tk=labToken();if(!tk)return;
+  fetch('/api/lab/llm',{method:'POST',headers:{'x-admin-token':tk,'Content-Type':'application/json'},body:JSON.stringify({paused:on})}).then(function(r){if(r.status===401){try{sessionStorage.removeItem('pbtoken')}catch(e){}say('Wrong or missing admin token. Alternative: set LLM_PAUSED=1 in Render → Environment.');return null}return r.json()}).then(function(j){
+    if(!j)return;if(LAB.d&&LAB.d.llm){LAB.d.llm.paused=j.paused;LAB.d.llm.forced=j.forced}
+    say(j.paused?(on?'LLM bots paused — no credits will be used':'Still paused: LLM_PAUSED is set on the server'):'LLM bots resumed');LAB.at=0;labFetch();if(typeof sbRefreshLLM==='function')sbRefreshLLM();if(ui.tab==='lab')labPaint()}).catch(function(){say('Could not reach the server')});
+}
 function chip(ok,txt){return '<span class="badge" style="margin:2px 4px 2px 0"><span class="dot '+(ok===true?'on':ok===false?'crit':'warn')+'"></span> '+txt+'</span>'}
 function labStatus(d){
   var L=d.llm,V=d.vault,T=d.tg,h='';
-  h+=chip(L.configured,'LLM '+(L.configured?esc(L.tier||'on')+' · '+L.calls+'/'+(L.cap||'?')+' calls today'+(L.backingOff?' · backing off':''):'no key'));
+  h+=chip(L.configured?(L.paused?null:true):false,'LLM '+(L.configured?(L.paused?'PAUSED':esc(L.tier||'on'))+' · '+L.calls+'/'+(L.cap||'?')+' calls today'+(L.backingOff?' · backing off':''):'no key'));
   h+=chip(V.configured,'Vault '+(V.configured?(V.lastCommit?'commit '+esc(V.lastCommit)+' · '+ago(V.lastAt):'waiting for first sync'):'off'));
   h+=chip(T.channel?(T.err?false:true):null,'Telegram '+(T.channel?'@'+esc(T.channel)+(T.err?' · '+esc(T.err):' · polled '+ago(T.lastPoll)):'no channel'));
   h+=chip(null,'queue '+d.queue+' · up '+d.uptimeMin+'m');
   var warn='';
+  if(L.configured)warn+='<div class="'+(L.paused?'warnbox':'')+'" style="margin:6px 0;display:flex;gap:10px;align-items:center;justify-content:space-between"><span class="sub" style="flex:1">'+(L.paused?'<b>LLM bots paused.</b> B, C, C0, lesson-writing and Telegram parsing use no credits; open trades still exit on their stop or target. Bots A and Q keep trading.':'LLM bots running (B, C, C0, lessons, Telegram parser).')+(L.forced?' <b>Forced by LLM_PAUSED on the server.</b>':'')+((L.savedCalls||L.prescreened)?' '+(L.savedCalls||0)+' calls avoided'+(L.prescreened?' ('+L.prescreened+' flat charts pre-screened)':'')+'.':'')+'</span><button data-llm="'+(L.paused?'resume':'pause')+'" style="min-height:34px">'+(L.paused?'Resume LLM bots':'Pause LLM bots')+'</button></div>';
   if(!L.configured)warn+='<div class="warnbox"><b>LLM key missing.</b> Set <code>LLM_API_KEY</code> (OpenRouter key) in Render → Environment. Until then only the rule bot (A) trades; B, C, C0 sit idle. Nothing else is needed.</div>';
   if(L.lastError&&L.configured)warn+='<div class="warnbox">Last LLM error: '+esc(L.lastError.msg)+' · '+ago(L.lastError.at)+'</div>';
   if(V.lastError)warn+='<div class="warnbox">Vault error: '+esc(V.lastError)+'</div>';
@@ -749,7 +756,7 @@ function labCompare(d){
 }
 function labPositions(d){
   var P=d.positions.filter(function(p){return (p.cur==='₹')===(LAB.mk==='IN')});
-  var h=P.length?P.map(function(p){return '<div class="pos"><div class="row"><b><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:'+BOTCOL[p.bot]+';margin-right:5px"></i>'+esc(p.bot)+' · '+esc(p.side)+' '+esc(p.name)+'</b><span class="num '+cls2(p.r)+'">'+lsgn(p.r)+'R</span></div><div class="sub num">in '+p.cur+p.entry.toFixed(2)+' · now '+p.cur+p.last.toFixed(2)+' · stop '+p.stop.toFixed(2)+(p.target?' · target '+p.target.toFixed(2):'')+'</div><div class="sub">'+esc((p.why||'').slice(0,160))+'</div></div>'}).join(''):'<div class="sub">No open positions in this market.</div>';
+  var h=P.length?P.map(function(p){return '<div class="pos"><div class="row"><b><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:'+BOTCOL[p.bot]+';margin-right:5px"></i>'+esc(p.bot)+' · '+esc(p.side)+' '+esc(p.name)+'</b><span class="num '+cls2(p.r)+'">'+lsgn(p.r)+'R</span></div><div class="sub num">in '+p.cur+p.entry.toFixed(2)+' · now '+p.cur+p.last.toFixed(2)+' · stop '+p.stop.toFixed(2)+(p.target?' · target '+p.target.toFixed(2):'')+'</div><div class="sub">'+esc((p.why||'').slice(0,480))+'</div></div>'}).join(''):'<div class="sub">No open positions in this market.</div>';
   var T=d.trades.filter(function(t){return t.book===LAB.mk}).slice(0,25);
   var th=T.length?'<div class="scroll"><table><tr><th>Closed</th><th>Bot</th><th>Trade</th><th class="r">R</th><th class="r">Net</th><th>Exit</th></tr>'+T.map(function(t){return '<tr><td>'+istStr(t.closeT)+'</td><td>'+esc(t.bot)+'</td><td>'+esc(t.side)+' '+esc(t.name)+'</td><td class="r num '+cls2(t.r)+'">'+lsgn(t.r)+'</td><td class="r num '+cls2(t.pnl)+'">'+money(t.cur,t.pnl)+'</td><td>'+esc(t.reason)+'</td></tr>'}).join('')+'</table></div>':'<div class="sub">No closed trades yet in this market.</div>';
   return '<div class="card"><h2>Open positions · '+MKT[LAB.mk]+'</h2>'+h+'</div><div class="card" style="margin-top:8px"><h2>Recent closed trades · '+MKT[LAB.mk]+' (times IST)</h2>'+th+'</div>';
@@ -798,8 +805,8 @@ function labEquity(d){
 function emaArr(cs,n){var k=2/(n+1),e=null,out=[];cs.forEach(function(c){e=e==null?c.close:c.close*k+e*(1-k);out.push({time:c.time,value:e})});return out}
 var chObj=null;
 function chLoad(force){
-  var C=LAB.ch;if(C.busy)return;C.busy=true;
-  fetch('/api/candles?sym='+encodeURIComponent(C.sym)+'&tf='+C.tf,{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){C.busy=false;if(j.error){C.err=j.error;C.data=null}else{C.err=null;C.data=j;C.at=Date.now();if(typeof chApplyLive==='function')chApplyLive()}if(ui.tab==='charts')chPaint(force)}).catch(function(e){C.busy=false;C.err=String(e);if(ui.tab==='charts')chPaint(false)});
+  var C=LAB.ch;if(C.busy)return;C.busy=true;var want=C.sym+'|'+C.tf;
+  fetch('/api/candles?sym='+encodeURIComponent(C.sym)+'&tf='+C.tf,{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){C.busy=false;if(want!==C.sym+'|'+C.tf){chLoad(true);return}if(j.error){C.err=j.error;C.data=null}else{C.err=null;C.data=j;C.at=Date.now();if(typeof chApplyLive==='function')chApplyLive()}if(ui.tab==='charts'){chPaint(force);try{chStrip(true)}catch(e){}}}).catch(function(e){C.busy=false;C.err=String(e);if(ui.tab==='charts')chPaint(false)});
 }
 function chPx(){
   if(Date.now()-LAB.pxAt<15000)return;LAB.pxAt=Date.now();
@@ -812,7 +819,7 @@ function chStrip(){
 }
 function chScaffold(){
   var C=LAB.ch;
-  $('#view').innerHTML='<div class="card"><div class="row"><h2>Live charts</h2><span class="sub" id="chinfo"></span></div><div id="chstrip" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px"></div>'+
+  $('#view').innerHTML='<div class="card"><div class="row"><h2>Live charts</h2><span class="sub" id="chinfo"></span></div><div id="chstrip" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px"></div><div style="margin:2px 0 6px"><input id="chsearch" type="search" autocomplete="off" placeholder="Search any stock, index, ETF, crypto, commodity…" style="width:100%;min-height:38px"><div id="chres" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"></div></div>'+
    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0"><span class="seg">'+['5m','15m','1h','1d'].map(function(t){return '<button data-chtf="'+t+'" class="'+(C.tf===t?'on':'')+'">'+t+'</button>'}).join('')+'</span><button id="chema" class="'+(C.ema?'on':'')+'">EMA 20/50</button><button id="chmk" class="'+(C.mk?'on':'')+'">Bot trades</button></div>'+
    '<div class="lwc" id="chhost" data-h="420" style="height:420px"></div><div class="legend"><span><i style="border-color:#2a78d6"></i>EMA 20</span><span><i style="border-color:#eb6834"></i>EMA 50</span><span>dashed: <b style="color:#d03b3b">stop</b> / <b style="color:#0ca30c">target</b> / entry of open bot trades</span><span>▲ long entry · ▼ short entry · ● exit (letter = bot A/B/C/D…)</span></div><div class="sub" style="margin-top:6px">Times are IST. Prices come from free feeds (Yahoo, Coinbase) and can lag a few minutes; India indices and stocks only move during NSE hours.</div></div>';
   chObj=null;chStrip();
@@ -852,6 +859,8 @@ function labTab(){
 }
 document.addEventListener('click',function(e){
   var t=e.target,b;
+  if((b=t.closest('[data-llm]'))){llmSet(b.getAttribute('data-llm')==='pause');return}
+  if((b=t.closest('[data-chpick]'))){chPick(b.getAttribute('data-chpick'));return}
   if((b=t.closest('[data-labmk]'))){LAB.mk=b.getAttribute('data-labmk');labPaint();return}
   if((b=t.closest('[data-chsym]'))){LAB.ch.sym=b.getAttribute('data-chsym');LAB.ch.data=null;chStrip();chPaint(true);chLoad(true);return}
   if((b=t.closest('[data-chtf]'))){LAB.ch.tf=b.getAttribute('data-chtf');LAB.ch.data=null;[].forEach.call(document.querySelectorAll('[data-chtf]'),function(x){x.classList.toggle('on',x===b)});chPaint(true);chLoad(true);return}
@@ -861,6 +870,20 @@ document.addEventListener('click',function(e){
 },true);
 window.addEventListener('resize',function(){if(ui.tab==='lab')labEquity(LAB.d||{bots:[],curves:{},cfg:{books:{}}});if(ui.tab==='charts'&&chObj){var h=$('#chhost');if(h)chObj.chart.applyOptions({width:Math.max(260,h.clientWidth)})}});
 setInterval(function(){if(ui.tab==='lab'||ui.tab==='charts')labTab()},3000);
+
+/* ---- chart search: any symbol Yahoo or Coinbase knows opens on demand (the bots trade a short watchlist; charts are free to open) ---- */
+var CHS={t:null,q:''};
+function chPick(sym){
+  LAB.ch.sym=sym;LAB.ch.data=null;var r=$('#chres');if(r)r.innerHTML='';var i=$('#chsearch');if(i)i.value='';chPaint(true);chLoad(true);try{chStrip(true)}catch(e){}
+}
+document.addEventListener('input',function(e){
+  if(!e.target||e.target.id!=='chsearch')return;var q=e.target.value.trim();CHS.q=q;clearTimeout(CHS.t);var r=$('#chres');
+  if(q.length<1){if(r)r.innerHTML='';return}
+  CHS.t=setTimeout(function(){fetch('/api/universe/search?q='+encodeURIComponent(q),{cache:'no-store'}).then(function(x){return x.json()}).then(function(j){
+    if(CHS.q!==q)return;var r=$('#chres');if(!r)return;
+    r.innerHTML=(j&&j.length)?j.map(function(x){return '<button class="chip" data-chpick="'+esc(x.sym)+'" title="'+esc(x.group||'')+'">'+esc(x.name)+' <span class="mut">'+esc(x.sym)+'</span></button>'}).join(''):'<span class="sub">No match. Try the ticker (e.g. TATAMOTORS.NS, AAPL, PEPE-USD).</span>'
+  }).catch(function(){})},320);
+});
 
 /* ===== PRO layer (server mode): Today tab, Backtest tab, command palette, hash routing, mobile bottom nav, tooltips, toasts, trade drawer ===== */
 var PRO={feeds:null,feedsAt:0,feedsBusy:false,bt:null,btAt:0,btBusy:false,btFull:null,btFullAt:0,book:'IN',sort:'oosExp',dir:-1,strat:'all',gate:'all',minN:15,show:25,pin:null,toast:[],pal:{open:false,q:'',i:0},more:false};
@@ -935,7 +958,7 @@ function healthRows(){
   h+=hrow(U.configured?(U.ok?true:(U.tokenRejected?false:null)):null,'India data: Upstox '+(U.configured?(U.ok?'live':U.tokenRejected?'token rejected':'waiting'):'not connected'),U.configured?(U.lastErr?esc(U.lastErr):'exchange feed · '+num(U.calls)+' calls · index quotes '+(F.indexSource||'–')+(F.indexMissing&&F.indexMissing.length?' · '+F.indexMissing.length+' indices without a quote':'')):'The NSE site blocks cloud servers (HTTP 403), so India indices and F&O only run with a broker feed. Set <code>UPSTOX_TOKEN</code> (free Analytics Token, valid 1 year, read-only).');
   h+=hrow(Y.cooling>0?false:(Y.n429>0?null:true),'Yahoo Finance gateway'+(Y.cooling>0?' · cooling '+Y.cooling+'s':''),num(Y.calls)+' calls · '+num(Y.cacheHits)+' cache hits · '+num(Y.n429)+' rate-limits · '+num(Y.stale)+' stale answers served'+(Y.lastErr?' · last: '+esc(Y.lastErr):''));
   if(L){var LL=L.llm,V=L.vault,T=L.tg;
-    h+=hrow(LL.configured,'LLM bots (B, C, C0) '+(LL.configured?'on · '+LL.calls+' calls today':'off'),LL.configured?(LL.lastError?esc(LL.lastError.msg):'model '+esc(LL.tier||'')):'Set <code>LLM_API_KEY</code> in Render. Until then only the rule bot (A) trades.');
+    h+=hrow(LL.configured?(LL.paused?null:true):false,'LLM bots (B, C, C0) '+(LL.configured?(LL.paused?'PAUSED · no credits used':'on · '+LL.calls+' calls today'):'off'),LL.configured?(LL.paused?'Resume from the menu (profile icon → Bots) or the AI Lab status card. '+(LL.savedCalls||0)+' calls avoided so far.':(LL.lastError?esc(LL.lastError.msg):'model '+esc(LL.tier||''))):'Set <code>LLM_API_KEY</code> in Render. Until then only the rule bot (A) trades.');
     h+=hrow(V.configured,'Memory vault '+(V.configured?'on':'off'),V.configured?'last commit '+esc(V.lastCommit||'–'):'Set <code>VAULT_REPO</code> + <code>VAULT_TOKEN</code> so trades and lessons survive restarts.');
     h+=hrow(T.channel?(T.err?false:true):null,'Telegram follower '+(T.channel?'@'+esc(T.channel):'no channel'),T.channel?(T.err?esc(T.err):'polled '+ago(T.lastPoll)):'Optional: set <code>TG_CHANNEL</code>.');
     h+=hrow(L.cfg.maxCostR>0?true:null,'Cost gate '+(L.cfg.maxCostR>0?'on · skips entries costing more than '+L.cfg.maxCostR+'R':'off'),L.cfg.maxCostR>0?'Fees + slippage must stay under '+L.cfg.maxCostR+' of the stop distance.':'Backtests say costs are what lose money on 15-minute bars. Set <code>LAB_MAX_COST_R=0.25</code> to skip trades that cannot pay their own costs.')}
@@ -1236,7 +1259,7 @@ function moreSheet(){
     moreItem('system','System','Agents, learning, feeds and activity log','system')+
     '<h3 style="margin:14px 2px 2px;color:var(--ink2);font-size:12px;text-transform:uppercase;letter-spacing:.5px">Jump to</h3>'+
     moreItem('funds','Funds','Every account: start, cash, in trades, P&amp;L','bots')+
-    moreItem('lab','AI Lab','Bots A / B / C / C0 with live decisions','lab')+
+    moreItem('lab','AI Lab','Bots A / B / C / C0 / Q with live decisions','lab')+
     moreItem('overview','Paper books','Per-market bots: India, F&amp;O, stocks, global, commodities, crypto','overview')+
     moreItem('market','Segments','Segments, regimes and signals','market')+
     moreItem('strategies','Strategies','Strategy registry and scores','strategies')+
@@ -1280,7 +1303,7 @@ homePaint=function(){_homePaint();var el=$('#homeroot');if(el)el.insertAdjacentH
 document.addEventListener('click',function(e){var w=e.target.closest&&e.target.closest('[data-wl]');if(w){LAB.ch.sym=w.getAttribute('data-wl');LAB.ch.data=null;goTab('charts');try{chLoad(true)}catch(x){}}},true);
 
 /* ---------- Bots screen ---------- */
-var BOTROLE={A:'Rule bot · no LLM',B:'LLM trader · decides entries & exits',C:'Rule + LLM approval · with lessons',C0:'Rule + LLM approval · no memory'};
+var BOTROLE={A:'Rule bot · no LLM',B:'LLM trader · decides entries & exits',C:'Rule + LLM approval · with lessons',C0:'Rule + LLM approval · no memory',Q:'Rule + written checklist · no LLM'};
 function botCard(b,mk){
   var m=b.byBook[mk]||{},bk=b.books[mk],c=nseClock(),live=mk==='CRYPTO'||c.open,col=BOTCOL[b.id]||'#555',trading=b.open>0;
   var status=trading?'<span class="pill2"><span class="dot on"></span>In trade</span>':live?'<span class="pill2"><span class="dot on"></span>Watching</span>':'<span class="pill2"><span class="dot warn"></span>Market closed</span>';
@@ -1361,6 +1384,8 @@ function labPosCard(){
   return '<div class="card" id="labpos" style="margin-bottom:10px"><div class="row"><h2>AI Lab bots · open in '+(mk==='IN'?'India':'Crypto')+' · '+ps.length+'</h2><button data-tab="bots" style="min-height:28px;padding:2px 10px;font-size:12px">All bots →</button></div>'+(ps.length?ps.map(posRow).join(''):'<div class="sub">No open AI Lab positions in this market.</div>')+'</div>';
 }
 function postView(v){
+  if(ui.tab==='market')return v+fnoCard();
+  if(ui.tab==='system')return v+coverageCard();
   if(ui.tab!=='overview')return v;
   if(!LAB.d||Date.now()-LAB.at>15000)labFetch();
   var h=labPosCard();if(!h)return v;
@@ -1373,7 +1398,8 @@ function qMk(q){return q.cur==='₹'?'IN':/-USD$/.test(q.sym)?'CRYPTO':'GLOBAL'}
 function chStrip(partial){
   var el=$('#chstrip');if(!el||!LAB.px)return;
   var ae=document.activeElement;if(!partial&&ae&&ae.tagName==='SELECT'&&el.contains(ae))return;
-  var px=LAB.px,cur=px.filter(function(q){return q.sym===LAB.ch.sym})[0];
+  var px=LAB.px,cur=px.filter(function(q){return q.sym===LAB.ch.sym})[0],cd=LAB.ch.data;
+  if(!cur&&cd&&cd.sym===LAB.ch.sym&&cd.candles&&cd.candles.length)cur={sym:cd.sym,name:cd.name,cur:cd.cur||'',price:cd.candles[cd.candles.length-1].c,chg:null,open:cd.open,live:false};
   if(cur&&APP.chmk!=='ALL'&&qMk(cur)!==APP.chmk)APP.chmk=qMk(cur);
   var list=px.filter(function(q){return APP.chmk==='ALL'||qMk(q)===APP.chmk}),cnt={ALL:px.length,IN:0,CRYPTO:0,GLOBAL:0};px.forEach(function(q){cnt[qMk(q)]++});
   var fmt=function(q){return q.cur+(+q.price).toLocaleString('en-IN',{maximumFractionDigits:q.price<10?4:2})};
@@ -1537,18 +1563,20 @@ function sbHtml(){
   var np=0;try{np=allPos().length}catch(e){}
   var inst=$('#install'),canInst=inst&&inst.style.display!=='none';
   return '<div class="sbh"><span class="logo">P</span><div class="who"><b>PaperBot</b><small>Paper trading · virtual money</small></div><button type="button" id="sbx" aria-label="Close menu">✕</button></div>'+
-   '<div id="sbsum">'+sbSummary()+'</div>'+
+   '<div id="sbsum">'+sbSummary()+'</div><div id="sbllm" style="padding:6px 8px 0">'+sbLLM()+'</div>'+
    '<nav class="sbs" aria-label="Menu">'+
    '<h4>Portfolio</h4>'+sbItem('funds','Funds','overview')+sbItem('bots','Positions','trades',np,' data-sbjump="botspos"')+sbItem('trades','Orders','trades')+sbItem('overview','Paper books','overview')+
    '<h4>Trade</h4>'+sbItem('home','Dashboard','home')+sbItem('charts','Charts','charts')+sbItem('market','Segments','market')+sbItem('setups','Setups','setups')+
    '<h4>Bots</h4>'+sbItem('bots','My bots','bots')+sbItem('lab','AI Lab','lab')+sbItem('strategies','Strategies','strategies')+sbItem('bt','Backtest','bt')+
    '<h4>Tools</h4>'+sbAct('search','Search','search')+sbAct('refresh','Refresh data','refresh')+sbAct('theme','Switch theme','theme')+(canInst?sbAct('install','Install app','install'):'')+sbItem('system','System &amp; feeds','system')+
    '</nav><div class="sbf" id="sbfoot">'+sbFoot()+'</div>'}
+function sbLLM(){var L=LAB.d&&LAB.d.llm;if(!L||!L.configured)return '';return '<button class="sbi" data-sb="llm"><span class="ic">'+ico('lab')+'</span><span class="t">LLM bots: '+(L.paused?'paused':'running')+'</span><span class="bd" style="'+(L.paused?'background:#d03b3b;color:#fff':'')+'">'+(L.paused?'Resume':'Pause')+'</span></button>'}
+function sbRefreshLLM(){var e=$('#sbllm');if(e)e.innerHTML=sbLLM()}
 function sbFoot(){return 'Paper trading only — no real orders are placed. Prices stream live from the server; India and stock quotes refresh as fast as their data source allows.'}
 function sbOpen(){
   var sb=$('#sidebar');if(!sb)return;sb.innerHTML=sbHtml();sb.classList.add('on');$('#sbback').classList.add('on');document.documentElement.classList.add('sbopen');SB.open=true;
   var m=$('#abmenu');if(m)m.setAttribute('aria-expanded','true');var x=$('#sbx');if(x)try{x.focus({preventScroll:true})}catch(e){}
-  if(!PRO.funds&&!liveFresh())fundsTab();
+  if(!PRO.funds&&!liveFresh())fundsTab();if(!LAB.d)labFetch();
 }
 function sbClose(){
   if(!SB.open)return;var sb=$('#sidebar');if(sb)sb.classList.remove('on');var bk=$('#sbback');if(bk)bk.classList.remove('on');document.documentElement.classList.remove('sbopen');SB.open=false;
@@ -1562,6 +1590,7 @@ document.addEventListener('click',function(e){
   var a=t.closest('#sidebar [data-sb]');
   if(a){e.stopImmediatePropagation();var k=a.getAttribute('data-sb');
     if(k==='theme'){var b=$('#theme');if(b)b.click();return}
+    if(k==='llm'){var L0=LAB.d&&LAB.d.llm;if(L0)llmSet(!L0.paused);return}
     sbClose();
     if(k==='search')palOpen();
     else if(k==='refresh'){PRO.feedsAt=0;PRO.btAt=0;PRO.posAt=0;LAB.at=0;LAB.pxAt=0;PRO.fundsAt=0;render();say('Refreshing…')}
@@ -1582,6 +1611,27 @@ window.addEventListener('click',function(){SCROLLAT=0},true);
 window.addEventListener('change',function(){SCROLLAT=0},true);
 setInterval(function(){if(scrolling())return;if(DIRTY.lab&&ui.tab==='lab')labPaint();if(DIRTY.home&&ui.tab==='home')homePaint();if(DIRTY.bots&&ui.tab==='bots')botsPaint();if(DIRTY.funds&&ui.tab==='funds')fundsPaint()},400);
 try{if(!nseClock().open)LAB.mk='CRYPTO'}catch(e){}
+/* ---------- F&O end of day (NSE archive) and market coverage ---------- */
+var FNO={d:null,at:0,busy:false},UNI={d:null,at:0,busy:false};
+function fnoFetch(force){if(FNO.busy||(!force&&Date.now()-FNO.at<120000))return;FNO.busy=true;jf('/api/fno/eod'+(force?'?refresh=1':'')).then(function(j){FNO.d=j;FNO.at=Date.now();FNO.busy=false;if(ui.tab==='market')render()}).catch(function(){FNO.busy=false;FNO.at=Date.now()})}
+function uniFetch(){if(UNI.busy||(UNI.d&&Date.now()-UNI.at<300000))return;UNI.busy=true;jf('/api/universe').then(function(j){UNI.d=j;UNI.at=Date.now();UNI.busy=false;if(ui.tab==='system')render()}).catch(function(){UNI.busy=false;UNI.at=Date.now()})}
+function fk(n){if(n==null)return '–';var a=Math.abs(n),s=n<0?'−':'+';return s+(a>=1e5?(a/1e5).toFixed(2)+'L':a>=1e3?(a/1e3).toFixed(1)+'k':Math.round(a))}
+function fnoCard(){
+  fnoFetch();var j=FNO.d,h='<div class="card full" style="margin-top:8px"><div class="row"><h2>F&amp;O positioning · NSE end of day</h2><span class="sub">'+(j&&j.data?esc(j.data.asOf):'')+'</span></div>';
+  if(!j)return h+'<div class="sub">Loading…</div></div>';
+  if(!j.data)return h+'<div class="warnbox">'+(j.status&&j.status.busy?'Fetching the NSE files…':'The NSE file archive could not be read from the server: '+esc((j.status&&j.status.err)||'no data yet')+'.')+'</div><div class="sub">Source: nsearchives.nseindia.com F&amp;O bhavcopy (free, published after the close). Live F&amp;O needs a broker feed: set <code>UPSTOX_TOKEN</code> (free).</div></div>';
+  var d=j.data,P=d.participants||{};
+  h+='<div class="scroll"><table><tr><th>Index</th><th class="r" title="put open interest / call open interest, nearest expiry">PCR</th><th class="r" title="strike where option writers pay out least">Max pain</th><th class="r" title="strike with the most call open interest: a ceiling traders defend">Call wall</th><th class="r" title="strike with the most put open interest: a floor traders defend">Put wall</th><th>Futures</th></tr>'+d.indices.map(function(x){var o=x.opt||{},f=x.fut||{};return '<tr><td><b>'+esc(x.sym)+'</b><div class="sub num" style="font-size:11px">'+(x.spot?x.spot.toLocaleString('en-IN'):'')+'</div></td><td class="r num">'+(o.pcr!=null?o.pcr.toFixed(2):'–')+'</td><td class="r num">'+(o.maxPain||'–')+'</td><td class="r num">'+(o.resist&&o.resist[0]?o.resist[0].k:'–')+'</td><td class="r num">'+(o.support&&o.support[0]?o.support[0].k:'–')+'</td><td>'+esc(f.class||'–')+'</td></tr>'}).join('')+'</table></div>';
+  if(P.FII){h+='<h3 style="margin:12px 0 4px;font-size:14px">Who holds what · index futures (contracts)</h3><div class="scroll"><table><tr><th>Group</th><th class="r">Net</th><th class="r">Change today</th><th class="r">Long share</th></tr>'+['FII','DII','CLIENT','PRO'].filter(function(k){return P[k]}).map(function(k){var x=P[k];return '<tr><td>'+k+'</td><td class="r num '+cls2(x.futIdxNet)+'">'+fk(x.futIdxNet)+'</td><td class="r num '+cls2(x.dFutIdxNet)+'">'+fk(x.dFutIdxNet)+'</td><td class="r num">'+(x.longPct==null?'–':x.longPct.toFixed(0)+'%')+'</td></tr>'}).join('')+'</table></div>'}
+  var B=d.breadth||{},L=d.leaders||{};h+='<h3 style="margin:12px 0 4px;font-size:14px">Stock futures: what the 120 biggest are doing</h3><div class="sub">'+['long buildup','short buildup','short covering','long unwinding'].map(function(k){return k+' <b>'+(B[k]||0)+'</b>'}).join(' · ')+'</div>';
+  ['long buildup','short buildup','short covering','long unwinding'].forEach(function(k){var a=L[k]||[];if(a.length)h+='<div class="sub" style="margin-top:6px"><b>'+k+'</b>: '+a.slice(0,6).map(function(x){return esc(x.sym)+' <span class="mut">'+lsgn(x.pricePct)+'% / OI '+lsgn(x.oiPct)+'%</span>'}).join(' · ')+'</div>'});
+  h+='<div class="sub" style="margin-top:10px">How to read it: <b>PCR</b> above ~1.2 means more puts than calls were written (supportive), below ~0.7 the reverse; at the extremes it flips to a contrarian signal, so it is context, not a trade. <b>Walls</b> are where most option writers are positioned. <b>Build-up</b> compares price and open-interest change (price up + OI up = new longs). Numbers are the exchange\'s, end of day; nothing here is a forecast, and no bot uses it as a trigger (bot Q prints it next to NIFTY / BANKNIFTY entries for context).</div></div>';
+  return h}
+function coverageCard(){
+  uniFetch();var u=UNI.d,h='<div class="card full" style="margin-top:8px"><h2>Market coverage</h2>';
+  if(!u)return h+'<div class="sub">Loading…</div></div>';
+  h+='<div class="scroll"><table><tr><th>Market</th><th class="r">Exists</th><th class="r" title="symbols the bots scan and trade">Traded</th><th class="r" title="symbols quoted in the Charts strip">In Charts</th></tr>'+u.rows.map(function(r){return '<tr><td>'+esc(r.label)+'<div class="sub" style="font-size:11px;line-height:1.25">'+esc(r.note||'')+'</div></td><td class="r num">'+esc(String(r.exists))+'<div class="sub" style="font-size:10px">'+esc(r.how||'')+'</div></td><td class="r num">'+r.lab+'</td><td class="r num">'+r.charts+'</td></tr>'}).join('')+'</table></div><div class="sub" style="margin-top:8px">Why not trade everything: a free server gets rate-limited by Yahoo within minutes if it polls thousands of symbols, and most extra symbols would only add correlated bets. Instead the bots trade a liquid watchlist and <b>Charts → search</b> opens any listed symbol on demand.</div></div>';
+  return h}
 liveOpen();
 APPREADY=true;(function(){var h=location.hash.slice(1);if(h&&TABS.some(function(t){return t[0]===h}))ui.tab=h})();renderTabs();try{render()}catch(e){}
 
