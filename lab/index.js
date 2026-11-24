@@ -102,11 +102,34 @@ function vaultSync(force) {
   V.put('_index/index.json', JSON.stringify(BOTS.reduce((a, id) => a.concat(st.bots[id].trades.slice(-300).map(t => ({ id: t.id, bot: t.bot, sym: t.sym, side: t.side, r: r2(t.r), date: new Date(t.closeT * 1000).toISOString().slice(0, 10), regime: t.extra && t.extra.f && t.extra.f.regime }))), [])));
   V.put('State/lab.json', JSON.stringify(exportState()));
 }
+/* ---------- editable amounts (defaults = env/code values kept in P.DEF) ---------- */
+function setCfgRaw(o) {
+  if (o.riskPct != null) P.CFG.riskPct = o.riskPct / 100; if (o.maxNotional != null) P.CFG.maxNotional = o.maxNotional; if (o.maxPos != null) P.CFG.maxPos = o.maxPos;
+  if (o.startIN != null) P.CFG.start.IN = o.startIN; if (o.startCRYPTO != null) P.CFG.start.CRYPTO = o.startCRYPTO;
+}
+const curVals = () => ({ riskPct: P.r4(P.CFG.riskPct * 100), maxNotional: P.CFG.maxNotional, maxPos: P.CFG.maxPos, startIN: P.CFG.start.IN, startCRYPTO: P.CFG.start.CRYPTO });
+const defVals = () => ({ riskPct: P.r4(P.DEF.riskPct * 100), maxNotional: P.DEF.maxNotional, maxPos: P.DEF.maxPos, startIN: P.DEF.start.IN, startCRYPTO: P.DEF.start.CRYPTO });
+const cfgOver = () => { const c = curVals(), d = defVals(), o = {}; Object.keys(c).forEach(k => { if (Math.abs(c[k] - d[k]) > 1e-9) o[k] = c[k]; }); return o; };
+const cfgInfo = () => ({ values: curVals(), defaults: defVals(), limits: P.LIMITS, overridden: Object.keys(cfgOver()) });
+/* Change the shared sizing. A new start amount is a deposit/withdrawal: every bot's equity (and its stored equity curve) moves by the same delta so closed P&L is untouched.
+ * Open trades keep the size they were opened with; new sizing applies to the next entry. patch.reset=true restores the defaults. */
+function setCfg(patch, by) {
+  patch = patch || {}; const want = patch.reset ? Object.assign({}, defVals()) : patch, c = P.checkCfg(want); if (!c.ok) return c;
+  const o = c.out, PXL = pxl(), deltas = {};
+  ['IN', 'CRYPTO'].forEach(k => { const key = 'start' + k; if (o[key] != null) deltas[k] = o[key] - P.CFG.start[k]; });
+  for (const k of Object.keys(deltas)) { if (!deltas[k]) continue; for (const id of BOTS) { if (P.equity(st.bots[id], k, PXL) + deltas[k] <= 0) return { ok: false, error: 'bot ' + id + ' ' + k + ' equity would be ' + P.r2(P.equity(st.bots[id], k, PXL) + deltas[k]) + ' or less at that start amount — pick a larger amount' }; } }
+  const before = curVals(); setCfgRaw(o);
+  Object.keys(deltas).forEach(k => { if (deltas[k]) BOTS.forEach(id => { st.bots[id].curve[k] = st.bots[id].curve[k].map(pt => [pt[0], P.r2(pt[1] + deltas[k])]); }); });
+  const after = curVals(), ch = Object.keys(after).filter(k => Math.abs(after[k] - before[k]) > 1e-9).map(k => k + ' ' + before[k] + ' → ' + after[k]);
+  if (ch.length) { logDec('SYS', '-', 'cfg', 'amounts changed (' + (by || 'ui') + '): ' + ch.join(', ') + ' — applies to new entries; open trades keep their size'); mem.dirty = true; save(); }
+  return { ok: true, changed: ch, info: cfgInfo() };
+}
 const KEEP = ['bots', 'lessons', 'lessonSeq', 'lastBar', 'cool', 'decisions', 'tg'];
-function exportState() { const o = { v: 1 }; KEEP.forEach(k => { o[k] = st[k]; }); o.llmPaused = LLM.isPaused(); return o; }
+function exportState() { const o = { v: 1 }; KEEP.forEach(k => { o[k] = st[k]; }); o.llmPaused = LLM.isPaused(); o.cfgOver = cfgOver(); return o; }
 function importState(o) {
   if (!o || o.v !== 1) return false;
   if (typeof o.llmPaused === 'boolean') LLM.setPaused(o.llmPaused, 'restored');
+  if (o.cfgOver) { const c = P.checkCfg(o.cfgOver); if (c.ok) setCfgRaw(c.out); }   // edited amounts survive a restart; the saved curves were already rebased when the edit was made
   BOTS.forEach(id => { if (o.bots && o.bots[id]) st.bots[id] = Object.assign(P.newBot(id, BOT_INFO[id][0], BOT_INFO[id][1]), o.bots[id]); });
   ['lessons', 'lessonSeq', 'lastBar', 'cool', 'decisions'].forEach(k => { if (o[k] != null) st[k] = o[k]; }); if (o.tg) st.tg = Object.assign(st.tg, o.tg);
   BOTS.forEach(id => st.bots[id].trades.forEach(t => mem.seenTrades.add(t.id))); return true;
@@ -364,4 +387,4 @@ function funds() {
   return out;
 }
 const universe = () => Object.assign(UNI.overview(SYMS, SYMS.concat(EXTRA)), { lab: SYMS, charts: EXTRA });
-module.exports = { universe, universeSearch: UNI.search, fnoEod: async () => { await FEOD.refresh(); return FEOD.eod(); }, fnoDebug: FEOD.debug, fnoRefresh: () => FEOD.refresh(true), qChecks, setLLMPaused, start, tick, snapshot, funds, liveTick, liveLite, chart, prices, chartSymbols, addSignal, shutdown, flushNow, features, ruleSignal, cleanCond, matches, state: st, tasks, TGparse: TG.parseRule };
+module.exports = { universe, universeSearch: UNI.search, fnoEod: async () => { await FEOD.refresh(); return FEOD.eod(); }, fnoDebug: FEOD.debug, fnoRefresh: () => FEOD.refresh(true), qChecks, setLLMPaused, setCfg, cfgInfo, start, tick, snapshot, funds, liveTick, liveLite, chart, prices, chartSymbols, addSignal, shutdown, flushNow, features, ruleSignal, cleanCond, matches, state: st, tasks, TGparse: TG.parseRule };

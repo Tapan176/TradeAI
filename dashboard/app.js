@@ -277,9 +277,38 @@ document.addEventListener('change',function(e){
 function sgn(c,x){return x==null?'–':(x>0?'+':x<0?'−':'')+c+num(Math.abs(x),Math.abs(x)<100?2:0)}
 function frow(k,v,cls){return '<div class="frow"><span>'+k+'</span><b class="'+(cls||'')+'">'+v+'</b></div>'}
 function fgauge(p){var w=Math.max(0,Math.min(100,p*100));return '<div class="fgauge'+(p>1?' over':'')+'"><i style="width:'+w.toFixed(1)+'%"></i></div>'}
+/* ---------- editable amounts (admin token). Defaults are the original values; "Reset" restores them. ---------- */
+(function(){var st=document.createElement('style');st.textContent='.fedit{border:1px dashed var(--line);border-radius:12px;padding:10px;margin-top:10px;display:grid;gap:8px}.ffld{display:grid;gap:3px;font-size:12.5px}.ffld span{color:var(--ink2);font-weight:600}.ffld input{width:100%;box-sizing:border-box;padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:15px}.ffld small{color:var(--ink2);font-size:11.5px}.fbtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}.fbtns button,.fbtn{padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--chip);color:var(--ink);font:inherit;font-size:13px;font-weight:650}.fbtns button.pri{background:var(--ink);color:var(--card);border-color:var(--ink)}.fbtn{margin-top:8px}.fnote2{font-size:12px;color:var(--ink2);line-height:1.4}';document.head.appendChild(st)})();
+function ffield(id,label,val,def,min,max,step,unit){return '<label class="ffld"><span>'+label+'</span><input data-ff="'+id+'" type="number" inputmode="decimal" min="'+min+'" max="'+max+'" step="'+step+'" value="'+val+'"><small>default '+def+(unit||'')+(String(val)!==String(def)?' · changed':'')+'</small></label>'}
+function fform(key,fields,note){return '<div class="fedit" data-fform="'+key+'">'+fields+'<div class="fnote2">'+note+'</div><div class="fbtns"><button class="pri" data-fsave="'+key+'">Save</button><button data-freset="'+key+'">Reset to defaults</button><button data-fcancel="1">Cancel</button></div></div>'}
+function fLabEdit(F){var e=F.labCfg&&F.labCfg.edit;if(!e)return '';
+  var h='<div class="sect"><h3>AI Lab amounts</h3></div><div class="fa"><div class="h"><div class="t"><b>Start amount, risk and size</b><small>shared by all lab bots · '+(e.overridden.length?e.overridden.length+' changed from default':'all at default')+'</small></div></div>';
+  if(APP.fedit!=='lab')return h+'<button class="fbtn" data-fedit="lab">Edit amounts</button></div>';
+  var v=e.values,d=e.defaults,L=e.limits;
+  return h+fform('lab',ffield('startIN','India start amount (₹)',v.startIN,d.startIN,L.startIN[0],L.startIN[1],'any')+ffield('startCRYPTO','Crypto start amount ($)',v.startCRYPTO,d.startCRYPTO,L.startCRYPTO[0],L.startCRYPTO[1],'any')+ffield('riskPct','Risk per trade (% of equity at the stop)',v.riskPct,d.riskPct,L.riskPct[0],L.riskPct[1],'any','%')+ffield('maxNotional','Max size of one trade (× equity)',v.maxNotional,d.maxNotional,L.maxNotional[0],L.maxNotional[1],'any','×')+ffield('maxPos','Max open trades per market',v.maxPos,d.maxPos,L.maxPos[0],L.maxPos[1],'1'),
+    'Risk % and max size cap how big each new trade is, so lowering them is the safest way to cut exposure. A new start amount works like a deposit or withdrawal: profit and loss stay as they are. Open trades keep their size; changes apply to the next entry.')+'</div>'}
+function fBookEdit(b){var e=b.edit;if(!e||!e.editable)return '';
+  if(APP.fedit!==b.slot)return '<button class="fbtn" data-fedit="'+b.slot+'">Edit amounts'+(e.edited?' · changed':'')+'</button>';
+  var v=e.values,d=e.defaults,L=e.limits,f=ffield('startBalance','Start amount ('+b.currency+')',v.startBalance,d.startBalance,L.startBalance[0],L.startBalance[1],'any');
+  if(v.maxPositions!=null)f+=ffield('maxPositions','Max open positions',v.maxPositions,d.maxPositions,L.maxPositions[0],L.maxPositions[1],'1');
+  if(v.sizePct!=null)f+=ffield('sizePct','Size of each trade (% of equity)',v.sizePct,d.sizePct,L.sizePct[0],Math.min(L.sizePct[1],e.capPct||L.sizePct[1]),'any','%');
+  return fform(b.slot,f,'A new start amount works like a deposit or withdrawal: profit and loss stay as they are. You can only withdraw cash that is not in open positions. Open positions keep their size; changes apply to the next entry.')}
+function fSave(key,reset){
+  var tk=labToken();if(!tk)return;var box=document.querySelector('.fedit[data-fform="'+key+'"]'),patch={};
+  if(reset)patch.reset=true;else if(box)Array.prototype.forEach.call(box.querySelectorAll('input[data-ff]'),function(i){patch[i.getAttribute('data-ff')]=i.value});
+  var url='/api/lab/cfg';if(key!=='lab'){url='/api/funds/set';patch.slot=key}
+  fetch(url,{method:'POST',headers:{'x-admin-token':tk,'Content-Type':'application/json'},body:JSON.stringify(patch)}).then(function(r){if(r.status===401){try{sessionStorage.removeItem('pbtoken')}catch(e){}say('Wrong or missing admin token (ADMIN_TOKEN on Render).');return null}return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
+    if(!x)return;if(!x.ok){say(x.j&&x.j.error||'Not saved');return}
+    say(x.j.changed&&x.j.changed.length?'Saved · '+x.j.changed.join(' · '):'Nothing changed');APP.fedit=null;
+    jf('/api/funds').then(function(j){PRO.funds=j;PRO.fundsAt=Date.now();fundsPaint(true)}).catch(function(){fundsPaint(true)})}).catch(function(){say('Could not reach the server')})}
+document.addEventListener('click',function(e){var t=e.target;if(!t.closest)return;
+  var a=t.closest('[data-fedit]');if(a){var k=a.getAttribute('data-fedit');APP.fedit=APP.fedit===k?null:k;fundsPaint(true);return}
+  if(t.closest('[data-fcancel]')){APP.fedit=null;fundsPaint(true);return}
+  var s=t.closest('[data-fsave]');if(s){fSave(s.getAttribute('data-fsave'),false);return}
+  var r=t.closest('[data-freset]');if(r){fSave(r.getAttribute('data-freset'),true);return}});
 function fundsPaint(force){
   var el=$('#fundsroot');if(!el)return;
-  if(!force){if(scrolling()){DIRTY.funds=1;return}var ae=document.activeElement;if(ae&&ae.tagName==='SELECT'&&el.contains(ae))return}
+  if(!force){if(APP.fedit){DIRTY.funds=1;return}if(scrolling()){DIRTY.funds=1;return}var ae=document.activeElement;if(ae&&ae.tagName==='SELECT'&&el.contains(ae))return}
   DIRTY.funds=0;
   var F=PRO.funds,mk=APP.fmk||'ALL',h='';
   h+='<div class="sect"><h3>Funds <span class="hint" style="text-transform:none;letter-spacing:0;font-weight:500">'+(F&&liveFresh()?'● live ':'')+(F?new Date(F.ts).toLocaleTimeString('en-IN',{hour12:false}):'')+'</span></h3>'+mkSelect('fundmk',mk,null)+'</div>';
@@ -294,6 +323,7 @@ function fundsPaint(force){
     var line=function(k,x){return x.n?frow(k+' · '+x.n+' account'+(x.n>1?'s':''),money(c,x.e)+'<small class="'+plCls(x.e-x.s)+'" style="display:block;font-weight:500">start '+money(c,x.s)+' · '+sgn(c,x.e-x.s)+'</small>'):''};
     h+='<div class="fa"><div class="h"><div class="t"><b>'+(c==='₹'?'Indian rupee ₹':'US dollar $')+'</b><small>separate pots that share no money</small></div><div class="e"><b class="'+plCls(all.e-all.s)+'">'+sgn(c,all.e-all.s)+'</b><small>net P&amp;L, all accounts</small></div></div>'+line('AI Lab bots',t.lab)+line('Paper books',t.bk)+frow('Combined now',money(c,all.e)+'<small style="display:block;font-weight:500;color:var(--ink2)">start '+money(c,all.s)+'</small>')+'</div>'});
   h+='</div>';
+  h+=fLabEdit(F);
   /* AI Lab */
   ['CRYPTO','IN'].forEach(function(k){
     var L=lab.filter(function(a){return a.book===k});if(!L.length)return;var c=L[0].currency;
@@ -301,7 +331,7 @@ function fundsPaint(force){
     L.forEach(function(a){var pl=a.equity-a.start,over=a.exposure>1;
       h+='<div class="fa"><div class="h"><span class="av" style="width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:#fff;font-weight:700;background:'+(BOTCOL[a.bot]||'#555')+'">'+esc(a.bot)+'</span><div class="t"><b>'+esc(a.name)+'</b><small>its own money</small></div><div class="e"><b>'+money(c,a.equity)+'</b><small class="'+plCls(pl)+'">'+plPct(a.start?pl/a.start:0)+'</small></div></div>'+
         fgauge(a.exposure)+'<div class="hint" style="margin-bottom:4px">'+(a.open?money(c,a.notional)+' in '+a.open+' open trade'+(a.open>1?'s':'')+' · '+a.exposure.toFixed(2)+'× equity':'nothing in use')+'</div>'+
-        frow('Start (set by '+a.env+')',money(c,a.start))+frow('Closed-trade P&amp;L, after fees',sgn(c,a.realized),plCls(a.realized))+frow('Open-trade P&amp;L',sgn(c,a.unrealized),plCls(a.unrealized))+frow('Fees paid',money(c,a.fees))+
+        frow('Start'+(((F.labCfg.edit||{}).overridden||[]).indexOf(k==='IN'?'startIN':'startCRYPTO')>=0?' (edited)':' (set by '+a.env+')'),money(c,a.start))+frow('Closed-trade P&amp;L, after fees',sgn(c,a.realized),plCls(a.realized))+frow('Open-trade P&amp;L',sgn(c,a.unrealized),plCls(a.unrealized))+frow('Fees paid',money(c,a.fees))+
         frow('Max loss if every open stop hits',money(c,a.riskAtStop)+(a.equity>0?' ('+(a.riskAtStop/a.equity*100).toFixed(1)+'%)':''))+frow('Open slots',a.open+' / '+a.maxPos)+frow('Closed trades',String(a.trades))+
         (over?'<span class="ftag w">exposure above 1× equity — the lab has no margin check</span>':'')+'</div>'});
     h+='</div>'});
@@ -312,11 +342,11 @@ function fundsPaint(force){
       var c=b.currency,use=b.equity>0?b.inPositions/b.equity:0;
       h+='<div class="fa"><div class="h"><div class="t"><b>'+esc(slotShort(b.label))+'</b><small>'+(b.practice?'practice replay · not live money':'its own cash')+(b.strategies?' · '+esc(b.strategies.join(', ')):'')+'</small></div><div class="e"><b>'+money(c,b.equity)+'</b><small class="'+plCls(b.pnl)+'">'+plPct(b.pnlPct)+'</small></div></div>'+
         fgauge(use)+'<div class="hint" style="margin-bottom:4px">'+(b.open?money(c,b.inPositions)+' in '+b.open+' position'+(b.open>1?'s':'')+' · '+(use*100).toFixed(0)+'% of equity':'nothing in use')+'</div>'+
-        frow('Start'+(b.env?' (set by '+b.env+')':' (fixed in code)'),money(c,b.start))+frow('Free cash',money(c,b.cash))+frow('In open positions',money(c,b.inPositions))+frow('Closed-trade P&amp;L',sgn(c,b.realized),plCls(b.realized))+frow('Open-trade P&amp;L',sgn(c,b.unrealized),plCls(b.unrealized))+
+        frow('Start'+(b.edit&&b.edit.edited?' (edited)':b.env?' (set by '+b.env+')':' (fixed in code)'),money(c,b.start))+frow('Free cash',money(c,b.cash))+frow('In open positions',money(c,b.inPositions))+frow('Closed-trade P&amp;L',sgn(c,b.realized),plCls(b.realized))+frow('Open-trade P&amp;L',sgn(c,b.unrealized),plCls(b.unrealized))+
         (b.fees!=null?frow('Fees paid',money(c,b.fees)):'')+frow('Open positions',b.open+(b.maxPositions?' / '+b.maxPositions:''))+frow('Closed trades',String(b.trades))+
-        '<span class="ftag'+(b.restored?'':' w')+'">'+(b.restored?'balance restored from '+esc(b.restored)+' at boot':'started fresh at boot — no saved state was found')+'</span>'+(b.halted?'<span class="ftag w">halted by drawdown limit</span>':'')+'</div>'});
+        '<span class="ftag'+(b.restored?'':' w')+'">'+(b.restored?'balance restored from '+esc(b.restored)+' at boot':'started fresh at boot — no saved state was found')+'</span>'+(b.halted?'<span class="ftag w">halted by drawdown limit</span>':'')+fBookEdit(b)+'</div>'});
     h+='</div>'}
-  h+='<div class="sect"><h3>How to read this</h3></div><div class="fnote">Every account is virtual paper money and trades only its own balance. AI Lab accounts and paper books are separate: the same BTC or Nifty move can appear in both, so do not add them as one pool. AI Lab sizes each trade by risk ('+(F.labCfg.riskPct!=null?(F.labCfg.riskPct*100).toFixed(1):'?')+'% of equity at the stop, up to '+(F.labCfg.maxNotional!=null?F.labCfg.maxNotional+'× equity':'?')+' per trade, '+(F.labCfg.maxPos||'?')+' slots) and does not deduct cash when a trade opens, so "in use" there is exposure, not spent money. Paper books do track cash. The start amount of each account comes from its setting on Render; changing it only takes effect for an account that starts fresh.</div>';
+  h+='<div class="sect"><h3>How to read this</h3></div><div class="fnote">Every account is virtual paper money and trades only its own balance. AI Lab accounts and paper books are separate: the same BTC or Nifty move can appear in both, so do not add them as one pool. AI Lab sizes each trade by risk ('+(F.labCfg.riskPct!=null?(F.labCfg.riskPct*100).toFixed(1):'?')+'% of equity at the stop, up to '+(F.labCfg.maxNotional!=null?F.labCfg.maxNotional+'× equity':'?')+' per trade, '+(F.labCfg.maxPos||'?')+' slots) and does not deduct cash when a trade opens, so "in use" there is exposure, not spent money. Paper books do track cash. Use Edit amounts to change an account\'s start amount, trade size and slots (admin token needed). The original values are kept as defaults, so Reset puts them back. Changing a start amount acts like a deposit or withdrawal: profit and loss stay as they are.</div>';
   if(el.__h===h&&el.firstElementChild)return;el.__h=h;el.innerHTML=h;
 }
 function fundsTab(){

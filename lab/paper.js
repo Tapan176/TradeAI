@@ -8,6 +8,20 @@ const CFG = {
   start: { IN: N('LAB_START_INR', 100000), CRYPTO: N('LAB_START_USD', 1000) },
   feeBps: { IN: N('LAB_FEE_BPS_IN', 4), CRYPTO: N('LAB_FEE_BPS_CRYPTO', 5) }, slipBps: { IN: N('LAB_SLIP_BPS_IN', 2), CRYPTO: N('LAB_SLIP_BPS_CRYPTO', 3) }
 };
+const DEF = { riskPct: CFG.riskPct, maxPos: CFG.maxPos, maxNotional: CFG.maxNotional, start: Object.assign({}, CFG.start) };   // env/code defaults, kept so edits can be reset
+const LIMITS = { riskPct: [0.05, 5], maxNotional: [0.05, 5], maxPos: [1, 10], startIN: [1000, 1e8], startCRYPTO: [10, 1e7] };   // riskPct in percent
+/* validate + apply an edit of the shared lab sizing. patch: {riskPct (percent), maxNotional (x equity), maxPos, startIN, startCRYPTO}. Returns {ok, error} or {ok, applied, deltas}. Nothing is applied unless every field is valid. */
+function checkCfg(patch) {
+  const out = {};
+  for (const k of Object.keys(patch || {})) {
+    if (!LIMITS[k]) return { ok: false, error: 'unknown setting ' + k };
+    const v = +patch[k]; if (patch[k] === '' || patch[k] == null || !isFinite(v)) return { ok: false, error: k + ' must be a number' };
+    if (v < LIMITS[k][0] || v > LIMITS[k][1]) return { ok: false, error: k + ' must be between ' + LIMITS[k][0] + ' and ' + LIMITS[k][1] };
+    if (k === 'maxPos' && Math.round(v) !== v) return { ok: false, error: 'maxPos must be a whole number' };
+    out[k] = v;
+  }
+  return { ok: true, out };
+}
 const cur = { IN: '₹', CRYPTO: '$' };
 const r2 = x => Math.round(x * 100) / 100, r4 = x => Math.round(x * 1e4) / 1e4;
 
@@ -76,4 +90,4 @@ function pairedDiff(bot, base, iters) {
   for (let i = 0; i < I; i++) { let s = 0; for (let j = 0; j < d.length; j++) s += d[Math.floor(rnd() * d.length)]; bs.push(s / d.length); }
   bs.sort((x, y) => x - y); return { days: d.length, mean: r4(mean), ci: [r4(bs[Math.floor(I * 0.025)]), r4(bs[Math.floor(I * 0.975)])] };
 }
-module.exports = { CFG, newBot, equity, open, close, manage, metrics, wilson, pairedDiff, istDay, r2, r4, cur };
+module.exports = { CFG, DEF, LIMITS, checkCfg, newBot, equity, open, close, manage, metrics, wilson, pairedDiff, istDay, r2, r4, cur };

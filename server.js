@@ -507,6 +507,42 @@ function summary() {
 
 /* single source of truth for money: every paper-book account (own engine, own cash) + every AI Lab bot account */
 const FUND_ENV = { india: 'START_BALANCE_INDIA', fno: 'START_BALANCE_FNO', crypto: 'START_BALANCE_CRYPTO', macro: 'START_BALANCE_MACRO', instocks: 'START_BALANCE_INSTOCKS', gstocks: 'START_BALANCE_GSTOCKS', nse: null, practice: null };
+/* ---------- editable paper-book amounts ----------
+ * Start balance: a deposit/withdrawal — cash, peak and the stored equity curve move by the same delta, so closed P&L is untouched. Open positions keep their size; new sizing applies to the next entry.
+ * First edit stores the original values in cfg.defaults (saved with the account) so "reset" works after restarts. */
+const BOOK_LIM = { startBalance: [1, 1e9], maxPositions: [1, 60], sizePct: [0.5, 50] };
+function bookEdit(n, s) {
+  if (n === 'practice' || !s.bot) return { editable: false };
+  const c = s.bot.state.cfg, d = c.defaults || {};
+  const cur = { startBalance: c.startBalance, maxPositions: c.maxPositions || null, sizePct: c.sizePct ? Math.round(c.sizePct * 1e4) / 100 : null };
+  return { editable: true, values: cur, defaults: { startBalance: d.startBalance != null ? d.startBalance : cur.startBalance, maxPositions: d.maxPositions != null ? d.maxPositions : cur.maxPositions, sizePct: d.sizePct ? Math.round(d.sizePct * 1e4) / 100 : cur.sizePct },
+    capPct: c.maxPositionPct ? Math.round(c.maxPositionPct * 1e4) / 100 : null, limits: BOOK_LIM, edited: !!c.defaults && (c.defaults.startBalance !== c.startBalance || (c.maxPositions || null) !== (c.defaults.maxPositions == null ? null : c.defaults.maxPositions) || (c.sizePct || 0) !== (c.defaults.sizePct || 0)) };
+}
+async function setBook(n, patch) {
+  const s = slots[n]; if (!s || !s.bot) return { ok: false, error: 'unknown or not-running account' };
+  if (n === 'practice') return { ok: false, error: 'the practice replay is not live money' };
+  const S = s.bot.state, c = S.cfg, info = bookEdit(n, s);
+  const want = patch && patch.reset ? Object.assign({}, info.defaults) : (patch || {}), out = {};
+  for (const k of Object.keys(want)) {
+    if (k === 'reset') continue; if (!BOOK_LIM[k]) return { ok: false, error: 'unknown setting ' + k };
+    if (want[k] == null || want[k] === '') continue; const v = +want[k]; if (!isFinite(v)) return { ok: false, error: k + ' must be a number' };
+    if (k === 'sizePct' && !c.sizePct) return { ok: false, error: 'this account sizes trades by strategy, not by a fixed percentage' };
+    if (k === 'maxPositions' && !c.maxPositions) return { ok: false, error: 'this account has no position-count setting' };
+    if (v < BOOK_LIM[k][0] || v > BOOK_LIM[k][1]) return { ok: false, error: k + ' must be between ' + BOOK_LIM[k][0] + ' and ' + BOOK_LIM[k][1] };
+    if (k === 'maxPositions' && Math.round(v) !== v) return { ok: false, error: 'maxPositions must be a whole number' };
+    out[k] = v;
+  }
+  if (out.sizePct != null && c.maxPositionPct && out.sizePct / 100 > c.maxPositionPct + 1e-9) return { ok: false, error: 'size per trade cannot exceed this account\'s per-position cap of ' + info.capPct + '%' };
+  const m = s.bot.metrics(), isFno = S.kind === 'fno', free = isFno ? m.cash : S.cash;
+  if (out.startBalance != null && out.startBalance !== c.startBalance) { const dl = out.startBalance - c.startBalance; if (free + dl < 0) return { ok: false, error: 'only ' + Math.round(free) + ' is free (not in open positions) — close positions first or choose a start of at least ' + Math.ceil(c.startBalance - free) }; }
+  if (!c.defaults) c.defaults = { startBalance: c.startBalance, maxPositions: c.maxPositions || null, sizePct: c.sizePct || 0 };
+  const ch = [];
+  if (out.startBalance != null && out.startBalance !== c.startBalance) { const dl = out.startBalance - c.startBalance; ch.push('start ' + c.startBalance + ' → ' + out.startBalance); if (!isFno) S.cash += dl; S.peak += dl; if (Array.isArray(S.equity)) S.equity.forEach(q => { if (q && typeof q.eq === 'number') q.eq += dl; }); c.startBalance = out.startBalance; }
+  if (out.maxPositions != null && out.maxPositions !== c.maxPositions) { ch.push('max positions ' + c.maxPositions + ' → ' + out.maxPositions); c.maxPositions = out.maxPositions; }
+  if (out.sizePct != null && Math.abs(out.sizePct / 100 - c.sizePct) > 1e-9) { ch.push('size per trade ' + Math.round(c.sizePct * 1e4) / 100 + '% → ' + out.sizePct + '%'); c.sizePct = out.sizePct / 100; }
+  if (ch.length) { try { if (s.bot.log) s.bot.log('Supervisor', 'info', 'Amounts changed (admin): ' + ch.join(', ')); } catch (e) { /* log is cosmetic */ } await saveAll(); }
+  return { ok: true, changed: ch, edit: bookEdit(n, s) };
+}
 function funds() {
   const books = Object.keys(slots).map(n => {
     const s = slots[n], S = s.bot && s.bot.state, out = { slot: n, label: DEFS[n].label, ready: false, restored: RESTORED[n] || null, env: FUND_ENV[n] === undefined ? null : FUND_ENV[n], practice: n === 'practice' };
@@ -514,12 +550,12 @@ function funds() {
     try {
       const m = s.bot.metrics(), c = S.cfg || {};
       Object.assign(out, { ready: true, currency: c.currency || '$', start: c.startBalance, equity: m.equity, cash: m.cash, inPositions: m.positionsValue, realized: m.realized, unrealized: m.unrealized, fees: m.fees == null ? null : m.fees,
-        pnl: m.totalPnl, pnlPct: m.totalPnlPct, trades: m.trades, open: Array.isArray(S.positions) ? S.positions.length : 0, maxPositions: c.maxPositions || null, sizePct: c.sizePct || null, strategies: c.enabled || null, halted: !!S.halted });
+        pnl: m.totalPnl, pnlPct: m.totalPnlPct, trades: m.trades, open: Array.isArray(S.positions) ? S.positions.length : 0, maxPositions: c.maxPositions || null, sizePct: c.sizePct || null, strategies: c.enabled || null, halted: !!S.halted, edit: bookEdit(n, s) });
     } catch (e) { out.err = String(e.message || e); }
     return out;
   });
   let lab = []; try { lab = LAB.funds(); } catch (e) { /* lab not ready */ }
-  return { ts: Date.now(), books, lab, labCfg: { riskPct: lab[0] ? lab[0].riskPct : null, maxPos: lab[0] ? lab[0].maxPos : null, maxNotional: lab[0] ? lab[0].maxNotional : null } };
+  return { ts: Date.now(), books, lab, labCfg: { riskPct: lab[0] ? lab[0].riskPct : null, maxPos: lab[0] ? lab[0].maxPos : null, maxNotional: lab[0] ? lab[0].maxNotional : null, edit: LAB.cfgInfo() } };
 }
 /* open positions of every paper-book slot (compact; used by the dashboard's per-market open-positions view) */
 function slotPositions() {
@@ -656,6 +692,13 @@ const server = http.createServer(async (req, res) => {
     let on = url.searchParams.get('paused'); try { const j = JSON.parse(b || '{}'); if (j.paused != null) on = j.paused; } catch (e) { /* query param */ }
     if (on == null) return send(400, { error: 'send {"paused":true|false}' });
     const r = LAB.setLLMPaused(on === true || on === 'true' || on === '1' || on === 1, 'admin'); return send(200, { ok: true, paused: r.paused, forced: r.forced });
+  }
+  if (req.method === 'POST' && (url.pathname === '/api/lab/cfg' || url.pathname === '/api/funds/set')) {   // edit allocation amounts. Admin-gated; validated; nothing is applied unless every field is valid.
+    if (!authed(req, url)) return send(401, { error: TOKEN ? 'missing/invalid ADMIN_TOKEN' : 'ADMIN_TOKEN is not set on the server' });
+    let b = ''; for await (const ch of req) { b += ch; if (b.length > 4000) break; }
+    let j; try { j = JSON.parse(b || '{}'); } catch (e) { return send(400, { error: 'send JSON' }); }
+    if (url.pathname === '/api/lab/cfg') { const r = LAB.setCfg(j, 'admin'); return send(r.ok ? 200 : 400, r); }
+    const slot = String(j.slot || ''); delete j.slot; const r = await setBook(slot, j); return send(r.ok ? 200 : 400, r);
   }
   if (req.method === 'POST' && url.pathname === '/api/lab/sync') { if (!authed(req, url)) return send(401, { error: 'missing/invalid ADMIN_TOKEN' }); try { const r = await LAB.flushNow(); await vaultStates('Manual state sync'); return send(200, { ok: true, r }); } catch (e) { return send(500, { error: e.message }); } }
 
