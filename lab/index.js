@@ -290,4 +290,22 @@ async function prices() {
 }
 const chartSymbols = () => SYMS.concat(EXTRA.filter(x => SYMS.indexOf(x) < 0)).map(s => ({ sym: s, name: D.inst(s).name, lab: SYMS.indexOf(s) >= 0 }));
 async function flushNow() { vaultSync(); const r = await V.flush('Manual lab sync'); await save(); return r; }
-module.exports = { start, tick, snapshot, chart, prices, chartSymbols, addSignal, shutdown, flushNow, features, ruleSignal, cleanCond, matches, state: st, tasks, TGparse: TG.parseRule };
+
+/* every AI Lab account (bot x market): start, equity, what is tied up in open trades. The lab is futures-like: no cash is deducted when a trade opens, so "in trades" is notional exposure, not spent money. */
+function funds() {
+  const out = [];
+  BOTS.forEach(id => {
+    const b = st.bots[id];
+    ['IN', 'CRYPTO'].forEach(k => {
+      const start = P.CFG.start[k]; let realized = 0, fees = 0, n = 0;
+      b.trades.forEach(t => { if (t.book === k) { realized += t.pnl; fees += t.fees; n++; } });
+      let unreal = 0, notional = 0, risk = 0, open = 0, openFees = 0;
+      b.pos.forEach(p => { if (p.book !== k) return; const last = mem.px[p.sym] != null ? mem.px[p.sym] : (p.last != null ? p.last : p.entry); unreal += p.side * (last - p.entry) * p.qty - p.feeIn; notional += p.qty * last; risk += p.riskAmt; openFees += p.feeIn; open++; });
+      const eq = P.equity(b, k, mem.px);
+      out.push({ bot: id, name: b.name, book: k, currency: P.cur[k], start, equity: eq, realized, unrealized: unreal, fees: fees + openFees, trades: n, open, maxPos: P.CFG.maxPos,
+        notional, exposure: eq > 0 ? notional / eq : 0, riskAtStop: risk, riskPct: P.CFG.riskPct, maxNotional: P.CFG.maxNotional, env: k === 'IN' ? 'LAB_START_INR' : 'LAB_START_USD' });
+    });
+  });
+  return out;
+}
+module.exports = { start, tick, snapshot, funds, chart, prices, chartSymbols, addSignal, shutdown, flushNow, features, ruleSignal, cleanCond, matches, state: st, tasks, TGparse: TG.parseRule };

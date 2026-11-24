@@ -643,13 +643,13 @@ function renderHeader(){
 }
 var ctrlSig='';
 function render(){
-  var solo=SERVER&&['home','bt','bots','lab','charts'].indexOf(ui.tab)>=0;
+  var solo=SERVER&&['home','bt','bots','funds','lab','charts'].indexOf(ui.tab)>=0;
   if((!snap&&!solo)||ui.hover)return;
   var ae=document.activeElement;if(ae&&/INPUT|SELECT/.test(ae.tagName)&&$('#view').contains(ae))return;
   if(snap){var sg2=[ui.paused,ui.speed,ui.nextAdaptive,ui.armReset,ui.mode,ui.slot,SERVER&&snap&&snap.server?snap.server.slots.length:0].join();if(sg2!==ctrlSig){ctrlSig=sg2;renderCtrl()}
   renderHeader()}
   var cc=$('#ctrl');if(cc)cc.style.display=(SERVER&&(ui.tab==='lab'||ui.tab==='charts'||ui.tab==='home'||ui.tab==='bt'))?'none':'';
-  if(SERVER&&(ui.tab==='home'||ui.tab==='bt'||ui.tab==='bots')){proTab();return}
+  if(SERVER&&(ui.tab==='home'||ui.tab==='bt'||ui.tab==='bots'||ui.tab==='funds')){proTab();return}
   if(SERVER&&(ui.tab==='lab'||ui.tab==='charts')){labTab();return}
   if(Date.now()-SCROLLAT<700)return; /* never rebuild the page under a finger / fling: it resets the scroll offset */
   var v={system:vSystem,strategies:vStrategies,setups:vSetups,overview:vOverview,market:vMarket,trades:vTrades,agents:vAgents,learning:vLearning,playbook:vPlaybook}[ui.tab]();
@@ -1192,12 +1192,13 @@ function ico(k){return '<svg viewBox="0 0 24 24" aria-hidden="true">'+(IC[k]||''
 
 /* ---------- navigation: 5-tab broker bar; Bots groups Bots/AI Lab/Overview; everything else lives under More ---------- */
 if(SERVER&&!TABS.some(function(t){return t[0]==='bots'}))TABS.splice(1,0,['bots','My bots']);
+if(SERVER&&!TABS.some(function(t){return t[0]==='funds'}))TABS.splice(2,0,['funds','Funds']);
 TABICON.bots='✦';
 var APPREADY,APP={mk:'ALL',chmk:'ALL',navStarted:false};
 /* nav groups: bottom bar shows the group; the sub-strip under the app bar moves between its pages */
-var GROUPS=[{id:'home',label:'Home',ic:'home',tabs:['home']},{id:'markets',label:'Markets',ic:'charts',tabs:['charts','market','setups']},{id:'bots',label:'Bots',ic:'bots',tabs:['bots','lab','overview','strategies']},{id:'orders',label:'Orders',ic:'trades',tabs:['trades']}];
+var GROUPS=[{id:'home',label:'Home',ic:'home',tabs:['home']},{id:'markets',label:'Markets',ic:'charts',tabs:['charts','market','setups']},{id:'bots',label:'Bots',ic:'bots',tabs:['bots','funds','lab','overview','strategies']},{id:'orders',label:'Orders',ic:'trades',tabs:['trades']}];
 function grpOf(tab){for(var i=0;i<GROUPS.length;i++)if(GROUPS[i].tabs.indexOf(tab)>=0)return GROUPS[i];return null}
-var TABNAME={home:'Home',charts:'Charts',market:'Segments',setups:'Setups',bots:'My bots',lab:'AI Lab',overview:'Paper books',strategies:'Strategies',trades:'Trades',bt:'Backtest',system:'System'};
+var TABNAME={home:'Home',charts:'Charts',market:'Segments',setups:'Setups',bots:'My bots',funds:'Funds',lab:'AI Lab',overview:'Paper books',strategies:'Strategies',trades:'Trades',bt:'Backtest',system:'System'};
 TABS.forEach(function(t){if(TABNAME[t[0]])t[1]=TABNAME[t[0]]});
 function renderTabs(){
   if(!APPREADY)return;
@@ -1210,7 +1211,7 @@ function renderTabs(){
   document.title='PaperBot · '+((TABS.filter(function(x){return x[0]===ui.tab})[0]||[0,''])[1]);
   if(window.abUpdate)abUpdate();
 }
-function proTab(){var cc=$('#ctrl');if(cc)cc.style.display='none';if(ui.tab==='home')homeTab();else if(ui.tab==='bt')btTab();else if(ui.tab==='bots')botsTab()}
+function proTab(){var cc=$('#ctrl');if(cc)cc.style.display='none';if(ui.tab==='home')homeTab();else if(ui.tab==='bt')btTab();else if(ui.tab==='bots')botsTab();else if(ui.tab==='funds')fundsTab()}
 
 /* ---------- app bar status: connection + market state (broker style) ---------- */
 function abUpdate(){
@@ -1233,6 +1234,7 @@ function moreSheet(){
     moreItem('bt','Backtest','Which strategies survive real costs','bt')+
     moreItem('system','System','Agents, learning, feeds and activity log','system')+
     '<h3 style="margin:14px 2px 2px;color:var(--ink2);font-size:12px;text-transform:uppercase;letter-spacing:.5px">Jump to</h3>'+
+    moreItem('funds','Funds','Every account: start, cash, in trades, P&amp;L','bots')+
     moreItem('lab','AI Lab','Bots A / B / C / C0 with live decisions','lab')+
     moreItem('overview','Paper books','Per-market bots: India, F&amp;O, stocks, global, commodities, crypto','overview')+
     moreItem('market','Segments','Segments, regimes and signals','market')+
@@ -1283,6 +1285,7 @@ function botCard(b,mk){
   var status=trading?'<span class="pill2"><span class="dot on"></span>In trade</span>':live?'<span class="pill2"><span class="dot on"></span>Watching</span>':'<span class="pill2"><span class="dot warn"></span>Market closed</span>';
   return '<button class="bcard" data-tab="lab"><div class="top"><span class="av" style="background:'+col+'">'+esc(b.id)+'</span><span class="nmx"><b>'+esc(b.name)+'</b><small>'+esc(BOTROLE[b.id]||b.desc||'')+'</small></span>'+status+'</div>'+
     '<div class="mid"><span class="eq">'+money(bk.cur,bk.equity)+'</span><span class="pl '+plCls(bk.pnlPct)+'">'+plPct(bk.pnlPct)+'</span></div>'+
+    '<div class="hint" style="margin-top:2px">own '+(mk==='CRYPTO'?'crypto':'India')+' account · started with '+money(bk.cur,bk.start)+'</div>'+
     '<div class="bst"><span>'+(m.trades||0)+' trades</span><span>hit '+(m.hit==null?'–':Math.round(m.hit*100)+'%')+'</span><span>exp '+(m.expR==null?'–':rfmt(m.expR))+'</span><span>'+b.open+' open</span>'+(b.stats&&b.stats.vetoed?'<span>'+b.stats.vetoed+' vetoed</span>':'')+'</span></div></button>';
 }
 var MKOPT=[['ALL','All markets'],['IN','India'],['CRYPTO','Crypto'],['GLOBAL','Global & commodities']];
@@ -1313,6 +1316,7 @@ function botsPaint(force){
   DIRTY.bots=0;
   var L=LAB.d,F=PRO.feeds,mk=LAB.mk,h='';
   h+='<div class="sect"><h3>AI Lab bots</h3><select id="botmk" aria-label="Bot market"><option value="CRYPTO"'+(mk==='CRYPTO'?' selected':'')+'>Crypto ($)</option><option value="IN"'+(mk==='IN'?' selected':'')+'>India (₹)</option></select></div>';
+  h+='<button class="fundlink" data-tab="funds">Funds · what each bot and account holds, and what is in use <span>→</span></button>';
   h+=L?'<div class="bgrid">'+L.bots.map(function(b){return botCard(b,mk)}).join('')+'</div>':'<div class="bgrid"><div class="skel" style="height:120px"></div><div class="skel" style="height:120px"></div></div>';
   var ps=allPos(),counts={ALL:ps.length,IN:0,CRYPTO:0,GLOBAL:0};ps.forEach(function(p){if(counts[p.mk]!=null)counts[p.mk]++});
   var shown=ps.filter(function(p){return APP.mk==='ALL'||p.mk===APP.mk});
@@ -1385,13 +1389,66 @@ document.addEventListener('change',function(e){
   else if(id==='slotsel'){if(v!==ui.slot){ui.slot=v;try{localStorage.setItem('paperbot4:slot',v)}catch(x){}snap=null;$('#status').textContent='loading '+v+'…';poll().then(function(){openStream()})}}
   else if(id==='posmk'){APP.mk=v;botsPaint(true)}
   else if(id==='botmk'){LAB.mk=v;botsPaint(true)}
+  else if(id==='fundmk'){APP.fmk=v;fundsPaint(true)}
 },true);
+
+/* ---------- Funds: every account, what it holds, who trades it ---------- */
+(function(){var st=document.createElement('style');st.textContent='.fa{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:12px 13px;min-width:0}.fa .h{display:flex;align-items:center;gap:10px}.fa .h .t{min-width:0;flex:1}.fa .h .t b{display:block;font-size:14px}.fa .h .t small{color:var(--ink2);font-size:12px}.fa .h .e{text-align:right}.fa .h .e b{display:block;font-size:18px;font-variant-numeric:tabular-nums}.fa .h .e small{font-size:12px;font-weight:650}.frow{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:13px}.frow span{color:var(--ink2)}.frow b{font-weight:600;font-variant-numeric:tabular-nums;text-align:right}.fgauge{height:6px;border-radius:4px;background:var(--chip);overflow:hidden;margin:10px 0 6px}.fgauge i{display:block;height:100%;background:var(--ink2);border-radius:4px}.fgauge.over i{background:#e8590c}.ftag{display:inline-block;font-size:11px;border:1px solid var(--line);border-radius:999px;padding:1px 8px;color:var(--ink2);margin:6px 6px 0 0}.ftag.w{border-color:#e8590c;color:#e8590c}.fgrid{display:grid;gap:8px}.fundlink{display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left;border:1px solid var(--line);border-radius:14px;background:var(--card);padding:10px 13px;margin:2px 0 10px;font-size:13px;min-height:0}.fnote{font-size:12px;color:var(--ink2);line-height:1.5;margin:4px 2px}';document.head.appendChild(st)})();
+function sgn(c,x){return x==null?'–':(x>0?'+':x<0?'−':'')+c+num(Math.abs(x),Math.abs(x)<100?2:0)}
+function frow(k,v,cls){return '<div class="frow"><span>'+k+'</span><b class="'+(cls||'')+'">'+v+'</b></div>'}
+function fgauge(p){var w=Math.max(0,Math.min(100,p*100));return '<div class="fgauge'+(p>1?' over':'')+'"><i style="width:'+w.toFixed(1)+'%"></i></div>'}
+function fundsPaint(force){
+  var el=$('#fundsroot');if(!el)return;
+  if(!force){if(scrolling()){DIRTY.funds=1;return}var ae=document.activeElement;if(ae&&ae.tagName==='SELECT'&&el.contains(ae))return}
+  DIRTY.funds=0;
+  var F=PRO.funds,mk=APP.fmk||'ALL',h='';
+  h+='<div class="sect"><h3>Funds</h3>'+mkSelect('fundmk',mk,null)+'</div>';
+  if(!F){el.innerHTML=h+'<div class="skel" style="height:120px"></div><div class="skel" style="height:160px;margin-top:8px"></div>';return}
+  var lab=F.lab.filter(function(a){return mk==='ALL'||a.book===mk}),bk=F.books.filter(function(b){return mk==='ALL'||(SLOTMK[b.slot]||'IN')===mk});
+  /* totals per currency: never mix rupees and dollars; practice replay is not live money */
+  var T={};function tot(c){return T[c]||(T[c]={lab:{n:0,s:0,e:0},bk:{n:0,s:0,e:0}})}
+  lab.forEach(function(a){var t=tot(a.currency).lab;t.n++;t.s+=a.start;t.e+=a.equity});
+  bk.forEach(function(b){if(!b.ready||b.practice)return;var t=tot(b.currency).bk;t.n++;t.s+=b.start;t.e+=b.equity});
+  h+='<div class="sect"><h3>Totals by currency</h3></div><div class="fgrid">';
+  Object.keys(T).forEach(function(c){var t=T[c],all={s:t.lab.s+t.bk.s,e:t.lab.e+t.bk.e};
+    var line=function(k,x){return x.n?frow(k+' · '+x.n+' account'+(x.n>1?'s':''),money(c,x.e)+'<small class="'+plCls(x.e-x.s)+'" style="display:block;font-weight:500">start '+money(c,x.s)+' · '+sgn(c,x.e-x.s)+'</small>'):''};
+    h+='<div class="fa"><div class="h"><div class="t"><b>'+(c==='₹'?'Indian rupee ₹':'US dollar $')+'</b><small>separate pots that share no money</small></div><div class="e"><b class="'+plCls(all.e-all.s)+'">'+sgn(c,all.e-all.s)+'</b><small>net P&amp;L, all accounts</small></div></div>'+line('AI Lab bots',t.lab)+line('Paper books',t.bk)+frow('Combined now',money(c,all.e)+'<small style="display:block;font-weight:500;color:var(--ink2)">start '+money(c,all.s)+'</small>')+'</div>'});
+  h+='</div>';
+  /* AI Lab */
+  ['CRYPTO','IN'].forEach(function(k){
+    var L=lab.filter(function(a){return a.book===k});if(!L.length)return;var c=L[0].currency;
+    h+='<div class="sect"><h3>AI Lab · '+(k==='CRYPTO'?'Crypto':'India')+' accounts</h3><span class="hint">'+money(c,L[0].start)+' each</span></div><div class="fgrid">';
+    L.forEach(function(a){var pl=a.equity-a.start,over=a.exposure>1;
+      h+='<div class="fa"><div class="h"><span class="av" style="width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:#fff;font-weight:700;background:'+(BOTCOL[a.bot]||'#555')+'">'+esc(a.bot)+'</span><div class="t"><b>'+esc(a.name)+'</b><small>its own money</small></div><div class="e"><b>'+money(c,a.equity)+'</b><small class="'+plCls(pl)+'">'+plPct(a.start?pl/a.start:0)+'</small></div></div>'+
+        fgauge(a.exposure)+'<div class="hint" style="margin-bottom:4px">'+(a.open?money(c,a.notional)+' in '+a.open+' open trade'+(a.open>1?'s':'')+' · '+a.exposure.toFixed(2)+'× equity':'nothing in use')+'</div>'+
+        frow('Start (set by '+a.env+')',money(c,a.start))+frow('Closed-trade P&amp;L, after fees',sgn(c,a.realized),plCls(a.realized))+frow('Open-trade P&amp;L',sgn(c,a.unrealized),plCls(a.unrealized))+frow('Fees paid',money(c,a.fees))+
+        frow('Max loss if every open stop hits',money(c,a.riskAtStop)+(a.equity>0?' ('+(a.riskAtStop/a.equity*100).toFixed(1)+'%)':''))+frow('Open slots',a.open+' / '+a.maxPos)+frow('Closed trades',String(a.trades))+
+        (over?'<span class="ftag w">exposure above 1× equity — the lab has no margin check</span>':'')+'</div>'});
+    h+='</div>'});
+  /* paper books */
+  if(bk.length){h+='<div class="sect"><h3>Paper books · own engine, own cash</h3></div><div class="fgrid">';
+    bk.forEach(function(b){
+      if(!b.ready){h+='<div class="fa"><div class="h"><div class="t"><b>'+esc(slotShort(b.label))+'</b><small>not running yet · no balance to show</small></div></div></div>';return}
+      var c=b.currency,use=b.equity>0?b.inPositions/b.equity:0;
+      h+='<div class="fa"><div class="h"><div class="t"><b>'+esc(slotShort(b.label))+'</b><small>'+(b.practice?'practice replay · not live money':'its own cash')+(b.strategies?' · '+esc(b.strategies.join(', ')):'')+'</small></div><div class="e"><b>'+money(c,b.equity)+'</b><small class="'+plCls(b.pnl)+'">'+plPct(b.pnlPct)+'</small></div></div>'+
+        fgauge(use)+'<div class="hint" style="margin-bottom:4px">'+(b.open?money(c,b.inPositions)+' in '+b.open+' position'+(b.open>1?'s':'')+' · '+(use*100).toFixed(0)+'% of equity':'nothing in use')+'</div>'+
+        frow('Start'+(b.env?' (set by '+b.env+')':' (fixed in code)'),money(c,b.start))+frow('Free cash',money(c,b.cash))+frow('In open positions',money(c,b.inPositions))+frow('Closed-trade P&amp;L',sgn(c,b.realized),plCls(b.realized))+frow('Open-trade P&amp;L',sgn(c,b.unrealized),plCls(b.unrealized))+
+        (b.fees!=null?frow('Fees paid',money(c,b.fees)):'')+frow('Open positions',b.open+(b.maxPositions?' / '+b.maxPositions:''))+frow('Closed trades',String(b.trades))+
+        '<span class="ftag'+(b.restored?'':' w')+'">'+(b.restored?'balance restored from '+esc(b.restored)+' at boot':'started fresh at boot — no saved state was found')+'</span>'+(b.halted?'<span class="ftag w">halted by drawdown limit</span>':'')+'</div>'});
+    h+='</div>'}
+  h+='<div class="sect"><h3>How to read this</h3></div><div class="fnote">Every account is virtual paper money and trades only its own balance. AI Lab accounts and paper books are separate: the same BTC or Nifty move can appear in both, so do not add them as one pool. AI Lab sizes each trade by risk ('+(F.labCfg.riskPct!=null?(F.labCfg.riskPct*100).toFixed(1):'?')+'% of equity at the stop, up to '+(F.labCfg.maxNotional!=null?F.labCfg.maxNotional+'× equity':'?')+' per trade, '+(F.labCfg.maxPos||'?')+' slots) and does not deduct cash when a trade opens, so "in use" there is exposure, not spent money. Paper books do track cash. The start amount of each account comes from its setting on Render; changing it only takes effect for an account that starts fresh.</div>';
+  if(el.__h===h&&el.firstElementChild)return;el.__h=h;el.innerHTML=h;
+}
+function fundsTab(){
+  if(!$('#fundsroot')){$('#view').innerHTML='<div id="fundsroot"></div>';fundsPaint(true)}
+  if(!PRO.fundsBusy&&Date.now()-(PRO.fundsAt||0)>6000){PRO.fundsBusy=true;jf('/api/funds').then(function(j){PRO.funds=j;PRO.fundsAt=Date.now();PRO.fundsBusy=false;if(ui.tab==='funds')fundsPaint()}).catch(function(){PRO.fundsBusy=false})}
+}
 /* a repaint while the page is being scrolled snaps the scroll offset back: hold it until the scroll stops */
 var _labPaint=labPaint;labPaint=function(){if(scrolling()){DIRTY.lab=1;return}DIRTY.lab=0;_labPaint.apply(this,arguments)};
 var _homePaint2=homePaint;homePaint=function(){if(scrolling()){DIRTY.home=1;return}DIRTY.home=0;_homePaint2.apply(this,arguments)};
 window.addEventListener('click',function(){SCROLLAT=0},true);
 window.addEventListener('change',function(){SCROLLAT=0},true);
-setInterval(function(){if(scrolling())return;if(DIRTY.lab&&ui.tab==='lab')labPaint();if(DIRTY.home&&ui.tab==='home')homePaint();if(DIRTY.bots&&ui.tab==='bots')botsPaint()},400);
+setInterval(function(){if(scrolling())return;if(DIRTY.lab&&ui.tab==='lab')labPaint();if(DIRTY.home&&ui.tab==='home')homePaint();if(DIRTY.bots&&ui.tab==='bots')botsPaint();if(DIRTY.funds&&ui.tab==='funds')fundsPaint()},400);
 try{if(!nseClock().open)LAB.mk='CRYPTO'}catch(e){}
 APPREADY=true;(function(){var h=location.hash.slice(1);if(h&&TABS.some(function(t){return t[0]===h}))ui.tab=h})();renderTabs();try{render()}catch(e){}
 

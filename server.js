@@ -71,10 +71,11 @@ async function persist(name, obj) {
     try { await upstash('set/' + upKey(name), z); lastSaved[name] = z; } catch (e) { console.error('persist', name, e.message); }
   }
 }
+const RESTORED = {};   // slot -> where its saved state came from at boot (absent = started fresh)
 async function restore(name) {
-  try { if (UP_URL && UP_TOK) { const r = await upstash('get/' + upKey(name)); if (r && r.result) { console.log('restored', name, 'from upstash'); return dec(r.result); } } } catch (e) { console.error('restore', name, e.message); }
-  try { const o = dec(fs.readFileSync(fsKey(name), 'utf8')); if (o) { console.log('restored', name, 'from file'); return o; } } catch (e) { /* none */ }
-  try { if (VAULT.configured()) { const t = await VAULT.get('State/slot-' + name + '.json.gz64'); if (t) { console.log('restored', name, 'from vault'); return dec(t); } } } catch (e) { console.error('restore vault', name, e.message); }
+  try { if (UP_URL && UP_TOK) { const r = await upstash('get/' + upKey(name)); if (r && r.result) { console.log('restored', name, 'from upstash'); RESTORED[name] = 'Upstash'; return dec(r.result); } } } catch (e) { console.error('restore', name, e.message); }
+  try { const o = dec(fs.readFileSync(fsKey(name), 'utf8')); if (o) { console.log('restored', name, 'from file'); RESTORED[name] = 'local file'; return o; } } catch (e) { /* none */ }
+  try { if (VAULT.configured()) { const t = await VAULT.get('State/slot-' + name + '.json.gz64'); if (t) { console.log('restored', name, 'from vault'); RESTORED[name] = 'vault'; return dec(t); } } } catch (e) { console.error('restore vault', name, e.message); }
   return null;
 }
 const persistMode = () => [UP_URL && UP_TOK ? 'upstash' : null, VAULT.configured() ? 'vault' : null, 'file'].filter(Boolean).join('+');
@@ -503,6 +504,23 @@ function strategyRegistry() {
 function summary() {
   return Object.keys(slots).map(n => { const s = slots[n], m = s.bot && s.bot.metrics(); return { slot: n, label: DEFS[n].label, ready: !!s.bot, paused: s.paused, equity: m ? m.equity : null, pnlPct: m ? m.totalPnlPct : null, currency: s.bot ? s.bot.state.cfg.currency : '$', feed: s.bot ? s.bot.state.feed.mode : null, note: s.bot ? s.bot.state.feed.note : s.note, open: s.bot && Array.isArray(s.bot.state.positions) ? s.bot.state.positions.length : 0 }; });
 }
+
+/* single source of truth for money: every paper-book account (own engine, own cash) + every AI Lab bot account */
+const FUND_ENV = { india: 'START_BALANCE_INDIA', fno: 'START_BALANCE_FNO', crypto: 'START_BALANCE_CRYPTO', macro: 'START_BALANCE_MACRO', instocks: 'START_BALANCE_INSTOCKS', gstocks: 'START_BALANCE_GSTOCKS', nse: null, practice: null };
+function funds() {
+  const books = Object.keys(slots).map(n => {
+    const s = slots[n], S = s.bot && s.bot.state, out = { slot: n, label: DEFS[n].label, ready: false, restored: RESTORED[n] || null, env: FUND_ENV[n] === undefined ? null : FUND_ENV[n], practice: n === 'practice' };
+    if (!S) return out;
+    try {
+      const m = s.bot.metrics(), c = S.cfg || {};
+      Object.assign(out, { ready: true, currency: c.currency || '$', start: c.startBalance, equity: m.equity, cash: m.cash, inPositions: m.positionsValue, realized: m.realized, unrealized: m.unrealized, fees: m.fees == null ? null : m.fees,
+        pnl: m.totalPnl, pnlPct: m.totalPnlPct, trades: m.trades, open: Array.isArray(S.positions) ? S.positions.length : 0, maxPositions: c.maxPositions || null, sizePct: c.sizePct || null, strategies: c.enabled || null, halted: !!S.halted });
+    } catch (e) { out.err = String(e.message || e); }
+    return out;
+  });
+  let lab = []; try { lab = LAB.funds(); } catch (e) { /* lab not ready */ }
+  return { ts: Date.now(), books, lab, labCfg: { riskPct: lab[0] ? lab[0].riskPct : null, maxPos: lab[0] ? lab[0].maxPos : null, maxNotional: lab[0] ? lab[0].maxNotional : null } };
+}
 /* open positions of every paper-book slot (compact; used by the dashboard's per-market open-positions view) */
 function slotPositions() {
   return Object.keys(slots).map(n => {
@@ -529,6 +547,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/healthz') return send(200, { ok: true, up: process.uptime() | 0, slots: summary().map(s => ({ slot: s.slot, ready: s.ready, feed: s.feed })) });
   if (url.pathname === '/api/slots') return send(200, summary());
   if (url.pathname === '/api/positions') return send(200, slotPositions());
+  if (url.pathname === '/api/funds') return send(200, funds());
   if (url.pathname === '/api/segments') return send(200, segmentReport());
   if (url.pathname === '/api/setups') {
     const LBL = { nse: 'India live', india: 'India ETFs', instocks: 'India stocks', gstocks: 'Global stocks', macro: 'Commodities & FX', crypto: 'Crypto', practice: 'Practice' };
