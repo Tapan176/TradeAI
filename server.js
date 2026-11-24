@@ -536,6 +536,20 @@ function slotPositions() {
     return out;
   });
 }
+
+/* ---------- live stream: one SSE channel that pushes money + positions + prices the moment they change ---------- */
+const liveClients = new Set(); let liveLast = '', liveBusy = false, liveBeat = 0;
+function livePayload() { let lab = null; try { lab = LAB.liveLite(); } catch (e) { /* lab not ready */ } return { ts: Date.now(), funds: funds(), pos: slotPositions(), lab }; }
+async function liveLoop() {
+  if (!liveClients.size || liveBusy) return; liveBusy = true;
+  try {
+    try { await LAB.liveTick(); } catch (e) { /* prices are best effort */ }
+    const p = livePayload(), sig = JSON.stringify(Object.assign({}, p, { ts: 0, funds: Object.assign({}, p.funds, { ts: 0 }) }));
+    if (sig !== liveLast) { liveLast = sig; liveBeat = Date.now(); const d = 'data: ' + JSON.stringify(p) + '\n\n'; liveClients.forEach(c => { try { c.write(d); } catch (e) { liveClients.delete(c); } }); }
+    else if (Date.now() - liveBeat > 8000) { liveBeat = Date.now(); const d = 'data: {"hb":1,"ts":' + Date.now() + '}\n\n'; liveClients.forEach(c => { try { c.write(d); } catch (e) { liveClients.delete(c); } }); }
+  } catch (e) { console.error('live', e.message); } finally { liveBusy = false; }
+}
+setInterval(liveLoop, +process.env.LIVE_MS || 2000);
 function push(sl) { if (!sl.clients.size) return; const d = 'data: ' + body(sl) + '\n\n'; sl.clients.forEach(c => { try { c.write(d); } catch (e) { sl.clients.delete(c); } }); }
 const authed = (req, url) => TOKEN && (req.headers['x-admin-token'] === TOKEN || url.searchParams.get('token') === TOKEN);
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.svg': 'image/svg+xml' };
@@ -548,6 +562,11 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/slots') return send(200, summary());
   if (url.pathname === '/api/positions') return send(200, slotPositions());
   if (url.pathname === '/api/funds') return send(200, funds());
+  if (url.pathname === '/api/live') {
+    if (liveClients.size >= 25) return send(503, { error: 'too many live viewers' });
+    res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+    res.write('retry: 3000\n\ndata: ' + JSON.stringify(livePayload()) + '\n\n'); liveClients.add(res); req.on('close', () => liveClients.delete(res)); return;
+  }
   if (url.pathname === '/api/segments') return send(200, segmentReport());
   if (url.pathname === '/api/setups') {
     const LBL = { nse: 'India live', india: 'India ETFs', instocks: 'India stocks', gstocks: 'Global stocks', macro: 'Commodities & FX', crypto: 'Crypto', practice: 'Practice' };

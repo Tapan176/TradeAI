@@ -6,7 +6,7 @@
  *   C0 control   — identical to C but with memory OFF (to prove whether "learning" helps)
  *   D  telegram  — follows a Telegram channel's calls and scores their accuracy on live prices (tg.js)
  * Nothing here is investment advice. Paper money only. LLM output cannot be back-tested on past data (the model may remember it), so only forward results count. */
-const D = require('./data.js'), P = require('./paper.js'), LLM = require('./llm.js'), V = require('./vault.js'), TG = require('./tg.js');
+const CF = require('./cryptofeeds.js'), D = require('./data.js'), P = require('./paper.js'), LLM = require('./llm.js'), V = require('./vault.js'), TG = require('./tg.js');
 const S = (() => { try { return require('../signals.js'); } catch (e) { return require('../../signals.js'); } })();
 const E = process.env, FNO = (() => { try { return require('../fno.js'); } catch (e) { try { return require('../../fno.js'); } catch (e2) { return null; } } })();
 const SYMS = (E.LAB_SYMS || '^NSEI,^NSEBANK,RELIANCE.NS,HDFCBANK.NS,BTC-USD,ETH-USD,SOL-USD,XRP-USD').split(',').map(s => s.trim()).filter(Boolean);
@@ -20,7 +20,7 @@ let LIB = null; try { LIB = JSON.parse(require('fs').readFileSync(require('path'
 
 const st = { bots: {}, lessons: [], lessonSeq: 0, lastBar: {}, cool: {}, decisions: [], tg: { lastId: 0, signals: [], seq: 0, lastPoll: 0, err: null, baselined: false, polls: 0, newMsgs: 0 }, started: Date.now(), vaultAt: 0 };
 BOTS.forEach(id => { st.bots[id] = P.newBot(id, BOT_INFO[id][0], BOT_INFO[id][1]); });
-const scan = {}, tasks = [], mem = { px: {}, seenTrades: new Set(), dirty: true, draining: false, lastFlush: 0, lastSave: 0, vix: 15 };
+const scan = {}, tasks = [], mem = { live: {}, liveAt: 0, liveBusy: false, px: {}, seenTrades: new Set(), dirty: true, draining: false, lastFlush: 0, lastSave: 0, vix: 15 };
 let store = null;
 const now = () => Math.floor(Date.now() / 1000), r2 = P.r2;
 
@@ -263,7 +263,7 @@ async function shutdown() { try { await save(); if (V.configured()) { vaultSync(
 
 /* ---------- API payloads ---------- */
 function snapshot() {
-  const ms = BOTS.map(id => P.metrics(st.bots[id], mem.px)), base = st.bots.A;
+  const PXS = pxl(), ms = BOTS.map(id => P.metrics(st.bots[id], PXS)), base = st.bots.A;
   ms.forEach(m => { m.vsRule = m.id === 'A' ? null : P.pairedDiff(st.bots[m.id], base); });
   ms.forEach(m => {   // per-market breakdown: every bot is judged separately on India and on crypto
     m.byBook = {}; ['IN', 'CRYPTO'].forEach(k => {
@@ -272,7 +272,7 @@ function snapshot() {
     });
   });
   const positions = [], trades = [];
-  BOTS.forEach(id => { const b = st.bots[id]; b.pos.forEach(p => { const last = mem.px[p.sym] != null ? mem.px[p.sym] : p.entry; positions.push({ bot: id, id: p.id, sym: p.sym, name: p.name, cur: p.cur, side: p.side > 0 ? 'LONG' : 'SHORT', entry: p.entry, stop: p.stop, target: p.target, last, r: p.riskAmt ? p.side * (last - p.entry) * p.qty / p.riskAmt : 0, pnl: p.side * (last - p.entry) * p.qty - p.feeIn, openT: p.openT, why: p.why }); }); b.trades.slice(-80).forEach(t => trades.push(Object.assign({}, t, { extra: undefined, f: t.extra && t.extra.f }))); });
+  BOTS.forEach(id => { const b = st.bots[id]; b.pos.forEach(p => { const last = PXS[p.sym] != null ? PXS[p.sym] : p.entry; positions.push({ bot: id, id: p.id, sym: p.sym, name: p.name, cur: p.cur, side: p.side > 0 ? 'LONG' : 'SHORT', entry: p.entry, stop: p.stop, target: p.target, last, r: p.riskAmt ? p.side * (last - p.entry) * p.qty / p.riskAmt : 0, pnl: p.side * (last - p.entry) * p.qty - p.feeIn, openT: p.openT, why: p.why }); }); b.trades.slice(-80).forEach(t => trades.push(Object.assign({}, t, { extra: undefined, f: t.extra && t.extra.f }))); });
   trades.sort((a, b) => b.closeT - a.closeT);
   const tgs = st.tg.signals.slice(-60).reverse().map(s => ({ id: s.id, text: s.text, seenAt: s.seenAt, state: s.state, outcome: s.outcome, r: s.r, hits: s.hits, note: s.note, exitReason: s.exitReason, entry: s.entry, kind: s.p && s.p.kind, und: s.p && s.p.undName, strike: s.p && s.p.strike, opt: s.p && s.p.optType, side: s.p && s.p.side, sl: s.p && s.p.sl, targets: s.p && s.p.targets, entryType: s.p && s.p.entryType, entryLo: s.p && s.p.entryLo, src: s.src, via: s.p && s.p.llm ? 'llm' : 'rules' }));
   return { on: ON, now: Date.now(), cfg: { maxCostR: MAX_COST_R, symbols: SYMS, riskPct: P.CFG.riskPct * 100, minConf: MIN_CONF, stopAtr: STOP_ATR, targetAtr: TGT_ATR, lessonMinN: LESSON_N, books: P.CFG.start, feeBps: P.CFG.feeBps, slipBps: P.CFG.slipBps, noEntryMin: NOENTRY_MIN }, llm: LLM.status(), vault: V.status(), tg: { channel: TG.CHAN || null, err: st.tg.err, polls: st.tg.polls, newMsgs: st.tg.newMsgs, lastPoll: st.tg.lastPoll, baselined: st.tg.baselined, lastId: st.tg.lastId, score: tgScore(), signals: tgs }, bots: ms, positions, trades: trades.slice(0, 120), curves: BOTS.reduce((o, id) => { o[id] = st.bots[id].curve; return o; }, {}),
@@ -291,21 +291,37 @@ async function prices() {
 const chartSymbols = () => SYMS.concat(EXTRA.filter(x => SYMS.indexOf(x) < 0)).map(s => ({ sym: s, name: D.inst(s).name, lab: SYMS.indexOf(s) >= 0 }));
 async function flushNow() { vaultSync(); const r = await V.flush('Manual lab sync'); await save(); return r; }
 
+
+/* ---------- live display prices (never used for trading decisions: bots still trade on closed bars) ---------- */
+function pxl() { const o = Object.assign({}, mem.px), now = Date.now(); Object.keys(mem.live).forEach(k => { if (now - mem.live[k].t < 30000) o[k] = mem.live[k].p; }); return o; }
+async function liveTick() {
+  if (mem.liveBusy || Date.now() - mem.liveAt < 2500) return; mem.liveBusy = true;
+  try { const r = await CF.ticks(SYMS.filter(x => /-USD$/.test(x))), t = Date.now(); Object.keys(r).forEach(k => { mem.live[k] = { p: r[k].p, src: r[k].src, t }; }); mem.liveAt = t; }
+  catch (e) { /* keep last values */ } finally { mem.liveBusy = false; }
+}
+function labVer() { return BOTS.map(id => { const b = st.bots[id]; return b.trades.length + ':' + b.pos.length + ':' + b.seq; }).join('|') + '|' + st.decisions.length + ':' + st.lessons.length + ':' + st.tg.signals.length; }
+/* small, fast payload for the live stream: marked-to-market books + open positions + the live price map */
+function liveLite() {
+  const PX = pxl(), bots = BOTS.map(id => { const m = P.metrics(st.bots[id], PX); return { id, open: m.open, books: m.books }; }), positions = [];
+  BOTS.forEach(id => st.bots[id].pos.forEach(p => { const last = PX[p.sym] != null ? PX[p.sym] : p.entry; positions.push({ bot: id, id: p.id, sym: p.sym, name: p.name, cur: p.cur, side: p.side > 0 ? 'LONG' : 'SHORT', entry: p.entry, stop: p.stop, target: p.target, last, r: p.riskAmt ? p.side * (last - p.entry) * p.qty / p.riskAmt : 0, pnl: p.side * (last - p.entry) * p.qty - p.feeIn, openT: p.openT, why: p.why }); }));
+  const live = {}; Object.keys(mem.live).forEach(k => { if (Date.now() - mem.live[k].t < 30000) live[k] = { p: mem.live[k].p, src: mem.live[k].src }; });
+  return { ver: labVer(), bots, positions, live };
+}
 /* every AI Lab account (bot x market): start, equity, what is tied up in open trades. The lab is futures-like: no cash is deducted when a trade opens, so "in trades" is notional exposure, not spent money. */
 function funds() {
-  const out = [];
+  const out = [], PXL = pxl();
   BOTS.forEach(id => {
     const b = st.bots[id];
     ['IN', 'CRYPTO'].forEach(k => {
       const start = P.CFG.start[k]; let realized = 0, fees = 0, n = 0;
       b.trades.forEach(t => { if (t.book === k) { realized += t.pnl; fees += t.fees; n++; } });
       let unreal = 0, notional = 0, risk = 0, open = 0, openFees = 0;
-      b.pos.forEach(p => { if (p.book !== k) return; const last = mem.px[p.sym] != null ? mem.px[p.sym] : (p.last != null ? p.last : p.entry); unreal += p.side * (last - p.entry) * p.qty - p.feeIn; notional += p.qty * last; risk += p.riskAmt; openFees += p.feeIn; open++; });
-      const eq = P.equity(b, k, mem.px);
+      b.pos.forEach(p => { if (p.book !== k) return; const last = PXL[p.sym] != null ? PXL[p.sym] : (p.last != null ? p.last : p.entry); unreal += p.side * (last - p.entry) * p.qty - p.feeIn; notional += p.qty * last; risk += p.riskAmt; openFees += p.feeIn; open++; });
+      const eq = P.equity(b, k, PXL);
       out.push({ bot: id, name: b.name, book: k, currency: P.cur[k], start, equity: eq, realized, unrealized: unreal, fees: fees + openFees, trades: n, open, maxPos: P.CFG.maxPos,
         notional, exposure: eq > 0 ? notional / eq : 0, riskAtStop: risk, riskPct: P.CFG.riskPct, maxNotional: P.CFG.maxNotional, env: k === 'IN' ? 'LAB_START_INR' : 'LAB_START_USD' });
     });
   });
   return out;
 }
-module.exports = { start, tick, snapshot, funds, chart, prices, chartSymbols, addSignal, shutdown, flushNow, features, ruleSignal, cleanCond, matches, state: st, tasks, TGparse: TG.parseRule };
+module.exports = { start, tick, snapshot, funds, liveTick, liveLite, chart, prices, chartSymbols, addSignal, shutdown, flushNow, features, ruleSignal, cleanCond, matches, state: st, tasks, TGparse: TG.parseRule };

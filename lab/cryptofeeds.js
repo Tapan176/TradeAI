@@ -49,5 +49,23 @@ async function fromSource(src, sym, tf) { if (!SRC[src]) throw new Error('unknow
 async function probe(sym) {
   const out = {}; await Promise.all(Object.keys(SRC).map(async s => { const t0 = Date.now(); try { const cs = await from(s, sym || 'BTC-USD', '15m'); out[s] = { ok: true, ms: Date.now() - t0, bars: cs.length, last: cs[cs.length - 1].c }; } catch (e) { out[s] = { ok: false, err: e.message.slice(0, 100) }; } })); return out;
 }
+
+/* ---------- live tickers: last trade price only, polled every few seconds while someone is watching ---------- */
+const TICK = {
+  coinbase: async sym => +(await jget('https://api.exchange.coinbase.com/products/' + sym + '/ticker', 4000)).price,
+  kraken: async sym => { const b = base(sym), j = await jget('https://api.kraken.com/0/public/Ticker?pair=' + (b === 'BTC' ? 'XBT' : b) + 'USD', 4000); if (j.error && j.error.length) throw new Error('kraken ' + j.error[0]); const k = Object.keys(j.result)[0]; return +j.result[k].c[0]; },
+  okx: async sym => { const j = await jget('https://www.okx.com/api/v5/market/ticker?instId=' + base(sym) + '-USDT', 4000); if (j.code !== '0') throw new Error('okx ' + j.msg); return +j.data[0].last; },
+  bybit: async sym => { const j = await jget('https://api.bybit.com/v5/market/tickers?category=spot&symbol=' + base(sym) + 'USDT', 4000); if (j.retCode !== 0) throw new Error('bybit ' + j.retMsg); return +j.result.list[0].lastPrice; },
+  binance: async sym => +(await jget('https://data-api.binance.vision/api/v3/ticker/price?symbol=' + base(sym) + 'USDT', 4000)).price,
+  kucoin: async sym => { const j = await jget('https://api.kucoin.com/api/v1/market/orderbook/level1?symbol=' + base(sym) + '-USDT', 4000); if (j.code !== '200000') throw new Error('kucoin ' + j.msg); return +j.data.price; }
+};
+const tickSticky = {};
+async function tick1(sym) {
+  const pref = sticky[sym] && TICK[sticky[sym]] ? sticky[sym] : tickSticky[sym], order = (pref ? [pref] : []).concat(ORDER.filter(x => x !== pref && TICK[x]));
+  for (const src of order) { try { const p = await TICK[src](sym); if (p > 0 && isFinite(p)) { tickSticky[sym] = src; return { p, src }; } } catch (e) { /* next source */ } }
+  return null;
+}
+/* ticks([sym]) -> { sym: {p, src} } for the symbols that answered */
+async function ticks(syms) { const out = {}; await Promise.all(syms.map(async s => { const r = await tick1(s); if (r) out[s] = r; })); return out; }
 const status = () => ({ order: ORDER, sticky, health });
-module.exports = { candles, fromSource, probe, status, sources: Object.keys(SRC) };
+module.exports = { candles, fromSource, ticks, probe, status, sources: Object.keys(SRC) };
