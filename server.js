@@ -598,6 +598,24 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/slots') return send(200, summary());
   if (url.pathname === '/api/positions') return send(200, slotPositions());
   if (url.pathname === '/api/funds') return send(200, funds());
+  if (url.pathname === '/api/acct') {   // light per-account payload for the account page (no candles): money, open positions, recent trades, log, equity path, editable amounts
+    const n = url.searchParams.get('slot') || '', s = slots[n]; if (!s) return send(404, { error: 'unknown account' });
+    const out = { slot: n, label: DEFS[n].label, ready: !!s.bot, note: s.note || null, paused: !!s.paused, practice: n === 'practice', restored: RESTORED[n] || null, env: FUND_ENV[n] === undefined ? null : FUND_ENV[n] };
+    if (!s.bot) return send(200, out);
+    try {
+      const S = s.bot.state, c = S.cfg || {}, m = s.bot.metrics(), pos = (slotPositions().filter(x => x.slot === n)[0] || {}).positions || [];
+      const eq = Array.isArray(S.equity) ? S.equity : [], st = Math.max(1, Math.ceil(eq.length / 240));
+      Object.assign(out, { currency: c.currency || '$', start: c.startBalance, halted: S.halted || null, feed: S.feed || null, strategies: c.enabled || null,
+        metrics: { equity: m.equity, cash: m.cash, inPositions: m.positionsValue, realized: m.realized, unrealized: m.unrealized, pnl: m.totalPnl, pnlPct: m.totalPnlPct, trades: m.trades, wins: m.wins, winRate: m.winRate, pf: m.profitFactor, fees: m.fees, maxDD: m.maxDD, best: m.best, worst: m.worst, interest: m.interest || 0 },
+        risk: { maxPositions: c.maxPositions || null, sizePct: c.sizePct || null, maxPositionPct: c.maxPositionPct || null, haltDrawdown: c.haltDrawdown || null, feeRate: c.feeRate || null },
+        positions: pos, equity: eq.filter((q, i) => i % st === 0 || i === eq.length - 1).map(q => q.eq),
+        trades: (S.trades || []).slice(-120).reverse().map(t => ({ id: t.id, symbol: t.symbol, strategy: t.strategy, dir: t.dir || 'LONG', segment: t.segment || null, entry: t.entry, exit: t.exit, pnl: t.pnl, pnlPct: t.pnlPct, r: t.r, fees: t.fees, reason: t.reason, held: t.held, openTs: t.openTs || null, closeTs: t.closeTs || null, legs: t.legs && t.legs.length > 1 ? t.legs.length : null })),
+        log: (S.log || []).slice(-80).reverse().map(l => ({ ts: l.ts, agent: l.agent, level: l.level, msg: String(l.msg || '').slice(0, 300) })),
+        edit: bookEdit(n, s) });
+    } catch (e) { out.err = String(e.message || e); }
+    return send(200, out);
+  }
+
   if (url.pathname === '/api/live') {
     if (liveClients.size >= 25) return send(503, { error: 'too many live viewers' });
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });

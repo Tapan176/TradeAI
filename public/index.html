@@ -643,14 +643,14 @@ function renderHeader(){
 }
 var ctrlSig='';
 function render(){
-  var solo=SERVER&&['home','bt','bots','funds','lab','charts','bot'].indexOf(ui.tab)>=0;
+  var solo=SERVER&&['home','bt','bots','funds','lab','charts','bot','acct','activity'].indexOf(ui.tab)>=0;
   if(ui.hover)return;
   if(!snap&&!solo){var vw0=$('#view');if(vw0&&!vw0.querySelector('#ldg')){vw0.innerHTML='<div id="ldg" class="card sub">Loading…</div>';LASTVIEW=null;LASTFIRST=null}return}   /* never leave the previous tab\'s page on screen while this one loads */
   var ae=document.activeElement;if(ae&&/INPUT|SELECT/.test(ae.tagName)&&$('#view').contains(ae))return;
   if(snap){var sg2=[ui.paused,ui.speed,ui.nextAdaptive,ui.armReset,ui.mode,ui.slot,SERVER&&snap&&snap.server?snap.server.slots.length:0].join();if(sg2!==ctrlSig){ctrlSig=sg2;renderCtrl()}
   renderHeader()}
-  var cc=$('#ctrl');if(cc)cc.style.display=(SERVER&&(ui.tab==='lab'||ui.tab==='charts'||ui.tab==='bot'||ui.tab==='home'||ui.tab==='bt'))?'none':'';
-  if(SERVER&&(ui.tab==='home'||ui.tab==='bt'||ui.tab==='bots'||ui.tab==='funds')){proTab();return}
+  var cc=$('#ctrl');if(cc)cc.style.display=SERVER?'none':'';
+  if(SERVER&&(ui.tab==='home'||ui.tab==='bt'||ui.tab==='bots'||ui.tab==='funds'||ui.tab==='acct'||ui.tab==='activity')){proTab();return}
   if(SERVER&&(ui.tab==='lab'||ui.tab==='charts'||ui.tab==='bot')){labTab();return}
   if(Date.now()-SCROLLAT<700)return; /* never rebuild the page under a finger / fling: it resets the scroll offset */
   var v={system:vSystem,strategies:vStrategies,setups:vSetups,overview:vOverview,market:vMarket,trades:vTrades,agents:vAgents,learning:vLearning,playbook:vPlaybook}[ui.tab]();
@@ -723,8 +723,8 @@ function hsRestore(root,saved){saved.forEach(function(x){var n=root;for(var i=0;
 function setHTML(el,h){var x=el.scrollLeft,s=hsSave(el);el.innerHTML=h;if(s.length)hsRestore(el,s);if(x)el.scrollLeft=x}
 document.addEventListener('scroll',function(){if(typeof SCROLLAT!=='undefined')SCROLLAT=Date.now()},{capture:true,passive:true});   /* element scrolls (tables, chip strips) do not bubble to window: capture them so redraws wait */
 /* hash routing: #bot/C opens the AI Lab bot page of bot C; every other tab is its plain id */
-function hashTab(){var p=location.hash.slice(1).split('/');if(p[0]==='bot'&&p[1]&&/^[A-Za-z0-9]{1,4}$/.test(p[1])){LAB.bot=p[1];try{localStorage.setItem('paperbot4:labbot',p[1])}catch(e){}}return p[0]}
-function tabHash(){return ui.tab==='bot'&&LAB.bot?'bot/'+LAB.bot:ui.tab}
+function hashTab(){var p=location.hash.slice(1).split('/');if(p[0]==='bot'&&p[1]&&/^[A-Za-z0-9]{1,4}$/.test(p[1])){LAB.bot=p[1];try{localStorage.setItem('paperbot4:labbot',p[1])}catch(e){}}if(p[0]==='acct'&&p[1]&&/^[a-z0-9_]{1,20}$/.test(p[1]))LAB.acct=p[1];return p[0]}
+function tabHash(){return ui.tab==='bot'&&LAB.bot?'bot/'+LAB.bot:ui.tab==='acct'&&LAB.acct?'acct/'+LAB.acct:ui.tab}
 function lpct(x,d){return x==null?'–':(x*100).toFixed(d==null?1:d)+'%'}
 function lsgn(x,d){return x==null?'–':(x>0?'+':'')+x.toFixed(d==null?2:d)}
 function cls2(x){return x==null?'':x>0?'up':x<0?'dn':''}
@@ -1231,12 +1231,13 @@ function ico(k){return '<svg viewBox="0 0 24 24" aria-hidden="true">'+(IC[k]||''
 if(SERVER&&!TABS.some(function(t){return t[0]==='bots'}))TABS.splice(1,0,['bots','My bots']);
 if(SERVER&&!TABS.some(function(t){return t[0]==='funds'}))TABS.splice(2,0,['funds','Funds']);
 if(SERVER&&!TABS.some(function(t){return t[0]==='bot'})){var _li=TABS.map(function(t){return t[0]}).indexOf('lab');TABS.splice(_li>=0?_li+1:TABS.length,0,['bot','Bot page'])}
+if(SERVER){[['acct','Account'],['activity','Activity']].forEach(function(x){if(!TABS.some(function(t){return t[0]===x[0]}))TABS.push(x)})}
 TABICON.bots='✦';
 var APPREADY,APP={mk:'ALL',chmk:'ALL',navStarted:false};
 /* nav groups: bottom bar shows the group; the sub-strip under the app bar moves between its pages */
-var GROUPS=[{id:'home',label:'Home',ic:'home',tabs:['home']},{id:'markets',label:'Markets',ic:'charts',tabs:['charts','market','setups']},{id:'bots',label:'Accounts',ic:'bots',tabs:['bots','lab','funds'],also:['bot','overview','strategies']},{id:'orders',label:'Orders',ic:'trades',tabs:['trades']}];
+var GROUPS=[{id:'home',label:'Home',ic:'home',tabs:['home']},{id:'markets',label:'Markets',ic:'charts',tabs:['charts','market','setups']},{id:'bots',label:'Accounts',ic:'bots',tabs:['bots','lab'],also:['bot','acct','funds','overview','strategies']},{id:'orders',label:'Activity',ic:'trades',tabs:['activity','trades']}];
 function grpOf(tab){for(var i=0;i<GROUPS.length;i++)if(GROUPS[i].tabs.indexOf(tab)>=0||(GROUPS[i].also||[]).indexOf(tab)>=0)return GROUPS[i];return null}
-var TABNAME={home:'Home',charts:'Charts',market:'Segments',setups:'Setups',bots:'Accounts',funds:'Funds',lab:'AI Lab',bot:'Bot page',overview:'Paper books',strategies:'Strategies',trades:'Trades',bt:'Backtest',system:'System'};
+var TABNAME={home:'Home',charts:'Charts',market:'Segments',setups:'Setups',bots:'Accounts',acct:'Account',activity:'Activity',funds:'Funds',lab:'AI Lab',bot:'Bot page',overview:'Paper books',strategies:'Strategies',trades:'Order history',bt:'Backtest',system:'System'};
 TABS.forEach(function(t){if(TABNAME[t[0]])t[1]=TABNAME[t[0]]});
 function renderTabs(){
   if(!APPREADY)return;
@@ -1250,7 +1251,7 @@ function renderTabs(){
   document.title='PaperBot · '+((TABS.filter(function(x){return x[0]===ui.tab})[0]||[0,''])[1]);
   if(window.abUpdate)abUpdate();
 }
-function proTab(){var cc=$('#ctrl');if(cc)cc.style.display='none';if(ui.tab==='home')homeTab();else if(ui.tab==='bt')btTab();else if(ui.tab==='bots')botsTab();else if(ui.tab==='funds')fundsTab()}
+function proTab(){var cc=$('#ctrl');if(cc)cc.style.display='none';if(ui.tab==='home')homeTab();else if(ui.tab==='bt')btTab();else if(ui.tab==='bots')botsTab();else if(ui.tab==='funds')fundsTab();else if(ui.tab==='acct')acctTab();else if(ui.tab==='activity')actTab()}
 
 /* ---------- app bar status: connection + market state (broker style) ---------- */
 function abUpdate(){
@@ -1273,10 +1274,10 @@ function moreSheet(){
     moreItem('bt','Backtest','Which strategies survive real costs','bt')+
     moreItem('system','System','Agents, learning, feeds and activity log','system')+
     '<h3 style="margin:14px 2px 2px;color:var(--ink2);font-size:12px;text-transform:uppercase;letter-spacing:.5px">Jump to</h3>'+
-    moreItem('funds','Funds','Every account: start, cash, in trades, P&amp;L','bots')+
+    moreItem('funds','Funds breakdown','Cash, exposure, fees and risk of every account','bots')+
     moreItem('lab','AI Lab','Bots A / B / C / C0 / Q with live decisions','lab')+
-    moreItem('bot','Bot pages','One page per bot: positions, trades, decisions, rules','bots')+
-    moreItem('overview','Paper books','Per-market bots: India, F&amp;O, stocks, global, commodities, crypto','overview')+
+
+    moreItem('overview','Segment detail','Full paper-book view: charts, agents, learning, playbook','overview')+
     moreItem('market','Segments','Segments, regimes and signals','market')+
     moreItem('strategies','Strategies','Strategy registry and scores','strategies')+
     moreItem('setups','Setups','Trade setups scanner','setups')+
@@ -1292,6 +1293,8 @@ document.addEventListener('click',function(e){var t=e.target;if(!t.closest)retur
   if(t.closest('#m_theme')){var b=$('#theme');if(b)b.click();return}
   if(t.closest('#m_inst')){closeDrawer();var i=$('#install');if(i)i.click();return}
   var hg=t.closest('[data-botmk-go]');if(hg)LAB.mk=hg.getAttribute('data-botmk-go');
+  var ha=t.closest('[data-acct]');if(ha){LAB.acct=ha.getAttribute('data-acct');LAB.asub=ha.getAttribute('data-asub')||'overview'}
+  var hs2=t.closest('[data-bsub-go]');if(hs2)LAB.bsub=hs2.getAttribute('data-bsub-go');
   var hb=t.closest('[data-bot]');if(hb){LAB.bot=hb.getAttribute('data-bot');try{localStorage.setItem('paperbot4:labbot',LAB.bot)}catch(e){}}
   var bm=t.closest('[data-botmk]');if(bm){LAB.mk=bm.getAttribute('data-botmk');botsPaint(true);return}
 },true);
@@ -1358,7 +1361,7 @@ function accounts(){
   if(L)L.bots.forEach(function(b){['IN','CRYPTO'].forEach(function(k){var bk=b.books&&b.books[k];if(!bk)return;var m=b.byBook&&b.byBook[k]||{};
     out.push({kind:'LAB',mk:k,id:b.id,name:b.name,sub:'AI Lab · '+(BOTROLE[b.id]||b.desc||''),cur:bk.cur,eq:bk.equity,start:bk.start,pct:bk.pnlPct,open:m.open||0,trades:m.trades||0,col:BOTCOL[b.id]||'#555',attr:'data-tab="bot" data-bot="'+esc(b.id)+'" data-botmk-go="'+k+'"'})})});
   if(F&&F.books)F.books.forEach(function(x){if(x.practice)return;var mk=SLOTMK[x.slot]||'IN',fs=FS[x.slot]||{},live=fs.feed==='live';
-    out.push({kind:'BOOK',mk:mk,id:x.slot,name:slotShort(x.label),sub:'Paper book · '+(!x.ready?'not running yet':live?'live':(fs.feed||'idle'))+(x.strategies?' · '+x.strategies.join(', '):''),cur:x.currency||(mk==='IN'?'₹':'$'),eq:x.ready?x.equity:null,start:x.start,pct:x.ready?x.pnlPct:null,open:x.open||0,trades:x.trades||0,ready:x.ready,attr:'data-goslot="'+esc(x.slot)+'"'})});
+    out.push({kind:'BOOK',mk:mk,id:x.slot,name:slotShort(x.label),sub:'Paper book · '+(!x.ready?'not running yet':live?'live':(fs.feed||'idle'))+(x.strategies?' · '+x.strategies.join(', '):''),cur:x.currency||(mk==='IN'?'₹':'$'),eq:x.ready?x.equity:null,start:x.start,pct:x.ready?x.pnlPct:null,open:x.open||0,trades:x.trades||0,ready:x.ready,attr:'data-tab="acct" data-acct="'+esc(x.slot)+'"'})});
   return out;
 }
 function acRow(a){
@@ -1383,12 +1386,8 @@ function botsPaint(force){
   });
   if(!all.length)h+='<div class="aclist"><div class="skel" style="height:62px"></div><div class="skel" style="height:62px;margin-top:2px"></div></div>';
   else if(!shown.length)h+='<div class="card sub" style="margin-top:10px">No accounts match these filters.</div>';
-  /* open positions stay here until the Activity page replaces them */
-  var ps=allPos(),counts={ALL:ps.length,IN:0,CRYPTO:0,GLOBAL:0};ps.forEach(function(p){if(counts[p.mk]!=null)counts[p.mk]++});
-  var sp=ps.filter(function(p){return APP.mk==='ALL'||p.mk===APP.mk});
-  h+='<div class="sect" id="botspos" style="scroll-margin-top:120px;margin-top:16px"><h3>Open positions · '+sp.length+'</h3>'+mkSelect('posmk',APP.mk,counts)+'</div>';
-  h+='<div class="card">'+(sp.length?sp.slice(0,40).map(posRow).join(''):'<div class="sub">'+((LAB.d&&PRO.pos)?'No open positions'+(APP.mk==='ALL'?'':' in this market')+'.':'Loading…')+'</div>')+'</div>';
-  h+='<div class="hint" style="margin:12px 2px">AI Lab bots and paper books are separate pots of paper money. Tap any account to see its page. Start amounts and sizing can be changed on <a href="#funds" data-tab="funds">Funds</a>.</div>';
+  var npos=allPos().length;h+='<button class="fundlink" data-tab="activity" style="margin-top:14px">'+npos+' open position'+(npos===1?'':'s')+' and recent trades · Activity <span>→</span></button>';
+  h+='<div class="hint" style="margin:12px 2px">AI Lab bots and paper books are separate pots of paper money. Tap any account to see its page and change its amounts in Settings. <a href="#funds" data-tab="funds">Funds</a> has the full money breakdown.</div>';
   if(el.__h===h&&el.firstElementChild)return;
   el.__h=h;setHTML(el,h);
 }
@@ -1480,19 +1479,19 @@ function fgauge(p){var w=Math.max(0,Math.min(100,p*100));return '<div class="fga
 /* ---------- editable amounts (admin token). Defaults are the original values; "Reset" restores them. ---------- */
 (function(){var st=document.createElement('style');st.textContent='.fedit{border:1px dashed var(--line);border-radius:12px;padding:10px;margin-top:10px;display:grid;gap:8px}.ffld{display:grid;gap:3px;font-size:12.5px}.ffld span{color:var(--ink2);font-weight:600}.ffld input{width:100%;box-sizing:border-box;padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:15px}.ffld small{color:var(--ink2);font-size:11.5px}.fbtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}.fbtns button,.fbtn{padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--chip);color:var(--ink);font:inherit;font-size:13px;font-weight:650}.fbtns button.pri{background:var(--ink);color:var(--card);border-color:var(--ink)}.fbtn{margin-top:8px}.fnote2{font-size:12px;color:var(--ink2);line-height:1.4}';document.head.appendChild(st)})();
 function ffield(id,label,val,def,min,max,step,unit){return '<label class="ffld"><span>'+label+'</span><input data-ff="'+id+'" type="number" inputmode="decimal" min="'+min+'" max="'+max+'" step="'+step+'" value="'+val+'"><small>default '+def+(unit||'')+(String(val)!==String(def)?' · changed':'')+'</small></label>'}
-function fform(key,fields,note){return '<div class="fedit" data-fform="'+key+'">'+fields+'<div class="fnote2">'+note+'</div><div class="fbtns"><button class="pri" data-fsave="'+key+'">Save</button><button data-freset="'+key+'">Reset to defaults</button><button data-fcancel="1">Cancel</button></div></div>'}
-function fLabEdit(F){var e=F.labCfg&&F.labCfg.edit;if(!e)return '';
+function fform(key,fields,note,inline){return '<div class="fedit" data-fform="'+key+'">'+fields+'<div class="fnote2">'+note+'</div><div class="fbtns"><button class="pri" data-fsave="'+key+'">Save</button><button data-freset="'+key+'">Reset to defaults</button>'+(inline?'':'<button data-fcancel="1">Cancel</button>')+'</div></div>'}
+function fLabEdit(F,inline){var e=F&&F.labCfg&&F.labCfg.edit;if(!e)return '';
   var h='<div class="sect"><h3>AI Lab amounts</h3></div><div class="fa"><div class="h"><div class="t"><b>Start amount, risk and size</b><small>shared by all lab bots · '+(e.overridden.length?e.overridden.length+' changed from default':'all at default')+'</small></div></div>';
-  if(APP.fedit!=='lab')return h+'<button class="fbtn" data-fedit="lab">Edit amounts</button></div>';
+  if(!inline&&APP.fedit!=='lab')return h+'<button class="fbtn" data-fedit="lab">Edit amounts</button></div>';
   var v=e.values,d=e.defaults,L=e.limits;
   return h+fform('lab',ffield('startIN','India start amount (₹)',v.startIN,d.startIN,L.startIN[0],L.startIN[1],'any')+ffield('startCRYPTO','Crypto start amount ($)',v.startCRYPTO,d.startCRYPTO,L.startCRYPTO[0],L.startCRYPTO[1],'any')+ffield('riskPct','Risk per trade (% of equity at the stop)',v.riskPct,d.riskPct,L.riskPct[0],L.riskPct[1],'any','%')+ffield('maxNotional','Max size of one trade (× equity)',v.maxNotional,d.maxNotional,L.maxNotional[0],L.maxNotional[1],'any','×')+ffield('maxPos','Max open trades per market',v.maxPos,d.maxPos,L.maxPos[0],L.maxPos[1],'1'),
-    'Risk % and max size cap how big each new trade is, so lowering them is the safest way to cut exposure. A new start amount works like a deposit or withdrawal: profit and loss stay as they are. Open trades keep their size; changes apply to the next entry.')+'</div>'}
-function fBookEdit(b){var e=b.edit;if(!e||!e.editable)return '';
-  if(APP.fedit!==b.slot)return '<button class="fbtn" data-fedit="'+b.slot+'">Edit amounts'+(e.edited?' · changed':'')+'</button>';
+    'Risk % and max size cap how big each new trade is, so lowering them is the safest way to cut exposure. A new start amount works like a deposit or withdrawal: profit and loss stay as they are. Open trades keep their size; changes apply to the next entry.',inline)+'</div>'}
+function fBookEdit(b,inline){var e=b.edit;if(!e||!e.editable)return '';
+  if(!inline&&APP.fedit!==b.slot)return '<button class="fbtn" data-fedit="'+b.slot+'">Edit amounts'+(e.edited?' · changed':'')+'</button>';
   var v=e.values,d=e.defaults,L=e.limits,f=ffield('startBalance','Start amount ('+b.currency+')',v.startBalance,d.startBalance,L.startBalance[0],L.startBalance[1],'any');
   if(v.maxPositions!=null)f+=ffield('maxPositions','Max open positions',v.maxPositions,d.maxPositions,L.maxPositions[0],L.maxPositions[1],'1');
   if(v.sizePct!=null)f+=ffield('sizePct','Size of each trade (% of equity)',v.sizePct,d.sizePct,L.sizePct[0],Math.min(L.sizePct[1],e.capPct||L.sizePct[1]),'any','%');
-  return fform(b.slot,f,'A new start amount works like a deposit or withdrawal: profit and loss stay as they are. You can only withdraw cash that is not in open positions. Open positions keep their size; changes apply to the next entry.')}
+  return fform(b.slot,f,'A new start amount works like a deposit or withdrawal: profit and loss stay as they are. You can only withdraw cash that is not in open positions. Open positions keep their size; changes apply to the next entry.',inline)}
 function fSave(key,reset){
   var tk=labToken();if(!tk)return;var box=document.querySelector('.fedit[data-fform="'+key+'"]'),patch={};
   if(reset)patch.reset=true;else if(box)Array.prototype.forEach.call(box.querySelectorAll('input[data-ff]'),function(i){patch[i.getAttribute('data-ff')]=i.value});
@@ -1500,7 +1499,7 @@ function fSave(key,reset){
   fetch(url,{method:'POST',headers:{'x-admin-token':tk,'Content-Type':'application/json'},body:JSON.stringify(patch)}).then(function(r){if(r.status===401){try{sessionStorage.removeItem('pbtoken')}catch(e){}say('Wrong or missing admin token (ADMIN_TOKEN on Render).');return null}return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
     if(!x)return;if(!x.ok){say(x.j&&x.j.error||'Not saved');return}
     say(x.j.changed&&x.j.changed.length?'Saved · '+x.j.changed.join(' · '):'Nothing changed');APP.fedit=null;
-    jf('/api/funds').then(function(j){PRO.funds=j;PRO.fundsAt=Date.now();fundsPaint(true)}).catch(function(){fundsPaint(true)})}).catch(function(){say('Could not reach the server')})}
+    var rp=function(){if(ui.tab==='funds')fundsPaint(true);else if(ui.tab==='acct')acctLoad(LAB.acct,true);else if(ui.tab==='bot'){labFetch();botPgPaint(true)}};jf('/api/funds').then(function(j){PRO.funds=j;PRO.fundsAt=Date.now();rp()}).catch(rp)}).catch(function(){say('Could not reach the server')})}
 document.addEventListener('click',function(e){var t=e.target;if(!t.closest)return;
   var a=t.closest('[data-fedit]');if(a){var k=a.getAttribute('data-fedit');APP.fedit=APP.fedit===k?null:k;fundsPaint(true);return}
   if(t.closest('[data-fcancel]')){APP.fedit=null;fundsPaint(true);return}
@@ -1518,12 +1517,7 @@ function fundsPaint(force){
   var T={};function tot(c){return T[c]||(T[c]={lab:{n:0,s:0,e:0},bk:{n:0,s:0,e:0}})}
   lab.forEach(function(a){var t=tot(a.currency).lab;t.n++;t.s+=a.start;t.e+=a.equity});
   bk.forEach(function(b){if(!b.ready||b.practice)return;var t=tot(b.currency).bk;t.n++;t.s+=b.start;t.e+=b.equity});
-  h+='<div class="sect"><h3>Totals by currency</h3></div><div class="fgrid">';
-  Object.keys(T).forEach(function(c){var t=T[c],all={s:t.lab.s+t.bk.s,e:t.lab.e+t.bk.e};
-    var line=function(k,x){return x.n?frow(k+' · '+x.n+' account'+(x.n>1?'s':''),money(c,x.e)+'<small class="'+plCls(x.e-x.s)+'" style="display:block;font-weight:500">start '+money(c,x.s)+' · '+sgn(c,x.e-x.s)+'</small>'):''};
-    h+='<div class="fa"><div class="h"><div class="t"><b>'+(c==='₹'?'Indian rupee ₹':'US dollar $')+'</b><small>separate pots that share no money</small></div><div class="e"><b class="'+plCls(all.e-all.s)+'">'+sgn(c,all.e-all.s)+'</b><small>net P&amp;L, all accounts</small></div></div>'+line('AI Lab bots',t.lab)+line('Paper books',t.bk)+frow('Combined now',money(c,all.e)+'<small style="display:block;font-weight:500;color:var(--ink2)">start '+money(c,all.s)+'</small>')+'</div>'});
-  h+='</div>';
-  h+=fLabEdit(F);
+  h+='<div class="hint" style="margin:0 2px 8px">The detailed money breakdown of every account. Totals are on <a href="#bots" data-tab="bots">Accounts</a>; start amounts and sizing are changed in each account\'s Settings.</div>';
   /* AI Lab */
   ['CRYPTO','IN'].forEach(function(k){
     var L=lab.filter(function(a){return a.book===k});if(!L.length)return;var c=L[0].currency;
@@ -1533,7 +1527,7 @@ function fundsPaint(force){
         fgauge(a.exposure)+'<div class="hint" style="margin-bottom:4px">'+(a.open?money(c,a.notional)+' in '+a.open+' open trade'+(a.open>1?'s':'')+' · '+a.exposure.toFixed(2)+'× equity':'nothing in use')+'</div>'+
         frow('Start'+(((F.labCfg.edit||{}).overridden||[]).indexOf(k==='IN'?'startIN':'startCRYPTO')>=0?' (edited)':' (set by '+a.env+')'),money(c,a.start))+frow('Closed-trade P&amp;L, after fees',sgn(c,a.realized),plCls(a.realized))+frow('Open-trade P&amp;L',sgn(c,a.unrealized),plCls(a.unrealized))+frow('Fees paid',money(c,a.fees))+
         frow('Max loss if every open stop hits',money(c,a.riskAtStop)+(a.equity>0?' ('+(a.riskAtStop/a.equity*100).toFixed(1)+'%)':''))+frow('Open slots',a.open+' / '+a.maxPos)+frow('Closed trades',String(a.trades))+
-        (over?'<span class="ftag w">exposure above 1× equity — the lab has no margin check</span>':'')+'<button class="fbtn" data-tab="bot" data-bot="'+esc(a.bot)+'" data-botmk-go="'+k+'">Open bot page →</button></div>'});
+        (over?'<span class="ftag w">exposure above 1× equity — the lab has no margin check</span>':'')+'<button class="fbtn" data-tab="bot" data-bot="'+esc(a.bot)+'" data-botmk-go="'+k+'">Open bot page →</button> <button class="fbtn" data-tab="bot" data-bot="'+esc(a.bot)+'" data-botmk-go="'+k+'" data-bsub-go="settings">Change amounts →</button></div>'});
     h+='</div>'});
   /* paper books */
   if(bk.length){h+='<div class="sect"><h3>Paper books · own engine, own cash</h3></div><div class="fgrid">';
@@ -1544,9 +1538,9 @@ function fundsPaint(force){
         fgauge(use)+'<div class="hint" style="margin-bottom:4px">'+(b.open?money(c,b.inPositions)+' in '+b.open+' position'+(b.open>1?'s':'')+' · '+(use*100).toFixed(0)+'% of equity':'nothing in use')+'</div>'+
         frow('Start'+(b.edit&&b.edit.edited?' (edited)':b.env?' (set by '+b.env+')':' (fixed in code)'),money(c,b.start))+frow('Free cash',money(c,b.cash))+frow('In open positions',money(c,b.inPositions))+frow('Closed-trade P&amp;L',sgn(c,b.realized),plCls(b.realized))+frow('Open-trade P&amp;L',sgn(c,b.unrealized),plCls(b.unrealized))+
         (b.fees!=null?frow('Fees paid',money(c,b.fees)):'')+frow('Open positions',b.open+(b.maxPositions?' / '+b.maxPositions:''))+frow('Closed trades',String(b.trades))+
-        '<span class="ftag'+(b.restored?'':' w')+'">'+(b.restored?'balance restored from '+esc(b.restored)+' at boot':'started fresh at boot — no saved state was found')+'</span>'+(b.halted?'<span class="ftag w">halted by drawdown limit</span>':'')+fBookEdit(b)+'</div>'});
+        '<span class="ftag'+(b.restored?'':' w')+'">'+(b.restored?'balance restored from '+esc(b.restored)+' at boot':'started fresh at boot — no saved state was found')+'</span>'+(b.halted?'<span class="ftag w">halted by drawdown limit</span>':'')+(b.edit&&b.edit.editable?'<button class="fbtn" data-tab="acct" data-acct="'+esc(b.slot)+'" data-asub="settings">Change amounts →</button>':'')+'</div>'});
     h+='</div>'}
-  h+='<div class="sect"><h3>How to read this</h3></div><div class="fnote">Every account is virtual paper money and trades only its own balance. AI Lab accounts and paper books are separate: the same BTC or Nifty move can appear in both, so do not add them as one pool. AI Lab sizes each trade by risk ('+(F.labCfg.riskPct!=null?(F.labCfg.riskPct*100).toFixed(1):'?')+'% of equity at the stop, up to '+(F.labCfg.maxNotional!=null?F.labCfg.maxNotional+'× equity':'?')+' per trade, '+(F.labCfg.maxPos||'?')+' slots) and does not deduct cash when a trade opens, so "in use" there is exposure, not spent money. Paper books do track cash. Use Edit amounts to change an account\'s start amount, trade size and slots (admin token needed). The original values are kept as defaults, so Reset puts them back. Changing a start amount acts like a deposit or withdrawal: profit and loss stay as they are.</div>';
+  h+='<div class="sect"><h3>How to read this</h3></div><div class="fnote">Every account is virtual paper money and trades only its own balance. AI Lab accounts and paper books are separate: the same BTC or Nifty move can appear in both, so do not add them as one pool. AI Lab sizes each trade by risk ('+(F.labCfg.riskPct!=null?(F.labCfg.riskPct*100).toFixed(1):'?')+'% of equity at the stop, up to '+(F.labCfg.maxNotional!=null?F.labCfg.maxNotional+'× equity':'?')+' per trade, '+(F.labCfg.maxPos||'?')+' slots) and does not deduct cash when a trade opens, so "in use" there is exposure, not spent money. Paper books do track cash. Use Change amounts to edit an account\'s start amount, trade size and slots (admin token needed). The original values are kept as defaults, so Reset puts them back. Changing a start amount acts like a deposit or withdrawal: profit and loss stay as they are.</div>';
   if(el.__h===h&&el.firstElementChild)return;el.__h=h;setHTML(el,h);
 }
 function fundsTab(){
@@ -1576,6 +1570,7 @@ function livePaint(){
   else if(t==='charts'){chStrip(true)}
   else if(t==='lab'){if(now-LIVE.labAt>4000){LIVE.labAt=now;labPaint()}}
   else if(t==='bot'){if(now-LIVE.labAt>4000){LIVE.labAt=now;botPgPaint()}}
+  else if(t==='activity'){if(now-LIVE.labAt>4000){LIVE.labAt=now;actPaint()}}
   else if(t==='overview'){render()}
   if(SB.open)sbLive();
   abUpdate();
@@ -1687,7 +1682,7 @@ var _labPaint=labPaint;labPaint=function(){if(scrolling()){DIRTY.lab=1;return}DI
 var _homePaint2=homePaint;homePaint=function(){if(scrolling()){DIRTY.home=1;return}DIRTY.home=0;_homePaint2.apply(this,arguments)};
 window.addEventListener('click',function(){SCROLLAT=0},true);
 window.addEventListener('change',function(){SCROLLAT=0},true);
-setInterval(function(){if(scrolling())return;if(DIRTY.lab&&ui.tab==='lab')labPaint();if(DIRTY.botpg&&ui.tab==='bot')botPgPaint();if(DIRTY.home&&ui.tab==='home')homePaint();if(DIRTY.bots&&ui.tab==='bots')botsPaint();if(DIRTY.funds&&ui.tab==='funds')fundsPaint()},400);
+setInterval(function(){if(scrolling())return;if(DIRTY.lab&&ui.tab==='lab')labPaint();if(DIRTY.acct&&ui.tab==='acct')acctPaint();if(DIRTY.act&&ui.tab==='activity')actPaint();if(DIRTY.botpg&&ui.tab==='bot')botPgPaint();if(DIRTY.home&&ui.tab==='home')homePaint();if(DIRTY.bots&&ui.tab==='bots')botsPaint();if(DIRTY.funds&&ui.tab==='funds')fundsPaint()},400);
 try{if(!nseClock().open)LAB.mk='CRYPTO'}catch(e){}
 /* ---------- F&O end of day (NSE archive) and market coverage ---------- */
 var FNO={d:null,at:0,busy:false},UNI={d:null,at:0,busy:false};
@@ -1712,6 +1707,8 @@ function coverageCard(){
   h+='<div class="scroll"><table><tr><th>Market</th><th class="r">Exists</th><th class="r" title="symbols the bots scan and trade">Traded</th><th class="r" title="symbols quoted in the Charts strip">In Charts</th></tr>'+u.rows.map(function(r){return '<tr><td>'+esc(r.label)+'<div class="sub" style="font-size:11px;line-height:1.25">'+esc(r.note||'')+'</div></td><td class="r num">'+esc(String(r.exists))+'<div class="sub" style="font-size:10px">'+esc(r.how||'')+'</div></td><td class="r num">'+r.lab+'</td><td class="r num">'+r.charts+'</td></tr>'}).join('')+'</table></div><div class="sub" style="margin-top:8px">Why not trade everything: a free server gets rate-limited by Yahoo within minutes if it polls thousands of symbols, and most extra symbols would only add correlated bets. Instead the bots trade a liquid watchlist and <b>Charts → search</b> opens any listed symbol on demand.</div></div>';
   return h}
 liveOpen();
+/* bring the selected account chip into view once per switch (later redraws keep the user's own scroll) */
+function chipIntoView(el,key){if(el.__chip===key)return;var st=el.querySelector('.bpstrip'),on=st&&st.querySelector('.on');if(!on)return;el.__chip=key;var l=on.offsetLeft-st.offsetLeft,r=l+on.offsetWidth;if(l<st.scrollLeft||r>st.scrollLeft+st.clientWidth)st.scrollLeft=Math.max(0,l-(st.clientWidth-on.offsetWidth)/2)}
 /* ---------- AI Lab bot pages: one page per bot, with its own data options (like the paper-book segment pages) ---------- */
 (function(){var st=document.createElement('style');st.textContent='.bpstrip{display:flex;gap:8px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none}.bpstrip::-webkit-scrollbar{display:none}.bpb{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit}.bpb.on{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}.bpb .av{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;color:#fff;font-weight:700;font-size:12px}.bpb b{display:block;font-size:12.5px;line-height:1.1}.bpb small{font-size:11.5px;font-weight:650}.bpsub{display:flex;gap:6px;overflow-x:auto;padding:0 0 8px;scrollbar-width:none}.bpsub::-webkit-scrollbar{display:none}.bpsub button{flex:0 0 auto;padding:7px 13px;border-radius:999px;border:1px solid var(--line);background:var(--chip);color:var(--ink);font:inherit;font-size:13px;font-weight:600}.bpsub button.on{background:var(--ink);color:var(--card);border-color:var(--ink)}.bptop{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 0 8px}.bpback{border:0;background:none;color:var(--ink2);font:inherit;font-size:14px;font-weight:600;padding:6px 2px}.bptiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0}.bpt{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:10px 12px}.bpt .k{font-size:11.5px;color:var(--ink2);font-weight:600}.bpt .v{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px}.bpt .s{font-size:11.5px;color:var(--ink2);margin-top:2px}.bpn{display:flex;justify-content:space-between;gap:10px;margin-top:10px}.bpn button{flex:1;padding:10px;border-radius:12px;border:1px solid var(--line);background:var(--chip);color:var(--ink);font:inherit;font-weight:600}';document.head.appendChild(st)})();
 var BSUBS=[['overview','Overview'],['positions','Positions'],['trades','Trades'],['decisions','Decisions'],['lessons','Lessons'],['rules','Rules']];
@@ -1784,12 +1781,12 @@ function botPgPaint(force){
   var ids=L.bots.map(function(x){return x.id});if(!LAB.bot||ids.indexOf(LAB.bot)<0)LAB.bot=ids[0];
   var b=L.bots.filter(function(x){return x.id===LAB.bot})[0],mk=LAB.mk,sub=LAB.bsub;
   if(sub==='lessons'&&b.id!=='C'){sub=LAB.bsub='overview'}
-  var body={overview:bpOverview,positions:bpPositions,trades:bpTradesTab,decisions:bpDecisions,lessons:function(L2){return labLessons(L2)},rules:bpRules}[sub]||bpOverview;
+  var body={overview:bpOverview,positions:bpPositions,trades:bpTradesTab,decisions:bpDecisions,lessons:function(L2){return (LAB.rawLessons||labLessons)(L2)},rules:bpRules}[sub]||bpOverview;
   var h=bpHead(L,b,mk,sub)+body(L,b,mk);
   var i=ids.indexOf(b.id),pv=L.bots[(i+ids.length-1)%ids.length],nx=L.bots[(i+1)%ids.length];
   h+='<div class="bpn"><button data-bpbot="'+esc(pv.id)+'">‹ '+esc(pv.id)+' · '+esc(pv.name)+'</button><button data-bpbot="'+esc(nx.id)+'">'+esc(nx.id)+' · '+esc(nx.name)+' ›</button></div>';
   if(el.__h===h&&el.firstElementChild)return;
-  el.__h=h;setHTML(el,h);if(sub==='overview')bpEquity(L,b,mk);
+  el.__h=h;setHTML(el,h);chipIntoView(el,'bot:'+b.id);if(sub==='overview')bpEquity(L,b,mk);
   document.title='PaperBot · Bot '+b.id+' · '+b.name;
 }
 document.addEventListener('click',function(e){var t=e.target;if(!t.closest||ui.tab!=='bot')return;var x;
@@ -1798,6 +1795,186 @@ document.addEventListener('click',function(e){var t=e.target;if(!t.closest||ui.t
   if((x=t.closest('[data-bpmk]'))){LAB.mk=x.getAttribute('data-bpmk');botPgPaint(true);return}
 });
 window.addEventListener('resize',function(){if(ui.tab==='bot')botPgPaint(true)});
+/* ================= Account page: every paper book gets the same page template as an AI Lab bot ================= */
+var ASUBS=[['overview','Overview'],['positions','Positions'],['trades','Trades'],['log','Log'],['settings','Settings']];
+try{LAB.asub=LAB.asub||localStorage.getItem('paperbot4:asub')||'overview'}catch(e){LAB.asub=LAB.asub||'overview'}
+PRO.acct=PRO.acct||{};
+function istMs(ms){return ms?new Date(ms+19800000).toISOString().slice(5,16).replace('T',' '):'–'}
+function acctLoad(slot,force){if(!slot)return;var c=PRO.acct[slot]||(PRO.acct[slot]={});if(c.busy||(!force&&c.at&&Date.now()-c.at<7000))return;c.busy=true;
+  jf('/api/acct?slot='+encodeURIComponent(slot)).then(function(j){c.d=j;c.at=Date.now();c.busy=false;if(ui.tab==='acct'&&LAB.acct===slot)acctPaint();if(ui.tab==='activity')actPaint()}).catch(function(){c.busy=false})}
+function bookSlots(){var F=PRO.funds;return F&&F.books?F.books.filter(function(b){return !b.practice}):[]}
+function spark(vals,start){
+  if(!vals||vals.length<2)return '<div class="sub" style="padding:18px 2px">The curve appears after a few updates.</div>';
+  var W=340,H=110,mn=Math.min.apply(null,vals.concat([start])),mx=Math.max.apply(null,vals.concat([start])),rg=mx-mn||1,x=function(i){return (i/(vals.length-1)*W).toFixed(1)},y=function(v){return (H-6-(v-mn)/rg*(H-12)).toFixed(1)};
+  var up=vals[vals.length-1]>=start,col=up?'var(--pos,#2a6fdb)':'var(--neg,#d55e00)';
+  return '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="width:100%;height:120px;display:block" role="img" aria-label="Equity path"><line x1="0" x2="'+W+'" y1="'+y(start)+'" y2="'+y(start)+'" stroke="var(--line)" stroke-dasharray="4 4"/><polyline fill="none" stroke="'+col+'" stroke-width="2" vector-effect="non-scaling-stroke" points="'+vals.map(function(v,i){return x(i)+','+y(v)}).join(' ')+'"/></svg>';
+}
+function acctHead(slot,sub){
+  var bs=bookSlots(),h='<div class="bptop"><button class="bpback" data-tab="bots">‹ Accounts</button><button class="bpback" data-goslot="'+esc(slot)+'">Segment detail ›</button></div>';
+  if(bs.length)h+='<div class="bpstrip">'+bs.map(function(b){return '<button class="bpb'+(b.slot===slot?' on':'')+'" data-acsw="'+esc(b.slot)+'"><span class="av" style="background:var(--chip);color:var(--ink);border:1px solid var(--line)">'+esc(PBABBR[b.slot]||b.slot.slice(0,2).toUpperCase())+'</span><span><b>'+esc(slotShort(b.label))+'</b><small class="'+plCls(b.pnlPct)+'">'+(b.ready?plPct(b.pnlPct):'not running')+'</small></span></button>'}).join('')+'</div>';
+  return h+'<div class="bpsub">'+ASUBS.map(function(s){return '<button data-asub2="'+s[0]+'" class="'+(sub===s[0]?'on':'')+'">'+s[1]+'</button>'}).join('')+'</div>';
+}
+function acctOverview(d){
+  var m=d.metrics||{},c=d.currency||'$',r=d.risk||{},h='';
+  h+='<div class="bptiles">'+bpTile('Account value',money(c,m.equity),'started with '+money(c,d.start))+bpTile('Profit / loss',plPct(m.pnlPct),(m.pnl>=0?'+':'−')+c+num(Math.abs(m.pnl||0),Math.abs(m.pnl||0)<100?2:0)+' after fees',plCls(m.pnl))+
+    bpTile('Free cash',money(c,m.cash),'not in positions')+bpTile('In positions',money(c,m.inPositions),(d.positions||[]).length+' open'+(r.maxPositions?' of '+r.maxPositions:''))+
+    bpTile('Closed trades',String(m.trades||0),m.trades<30?'tiny sample — do not rank yet':'')+bpTile('Win rate',m.trades?Math.round(m.winRate*100)+'%':'–',m.trades?'profit factor '+(m.pf>=99?'∞':(m.pf||0).toFixed(2)):'')+
+    bpTile('Worst drawdown',m.maxDD==null?'–':(m.maxDD*100).toFixed(1)+'%','from the equity peak')+bpTile('Fees paid',money(c,m.fees),m.interest?'cash yield earned '+money(c,m.interest):'')+'</div>';
+  h+='<div class="card"><h2>Equity path</h2>'+spark(d.equity,d.start)+'<div class="hint">Dashed line = start amount.</div></div>';
+  var notes=[];if(d.halted)notes.push('<span class="ftag w">halted by the drawdown limit</span>');if(d.paused)notes.push('<span class="ftag w">paused by admin</span>');
+  if(d.feed&&d.feed.note)notes.push('<span class="ftag">'+esc(d.feed.note)+'</span>');notes.push('<span class="ftag'+(d.restored?'':' w')+'">'+(d.restored?'balance restored from '+esc(d.restored):'started fresh at the last restart')+'</span>');
+  if(d.strategies)notes.push('<span class="ftag">strategies: '+esc(d.strategies.join(', '))+'</span>');
+  return h+'<div style="margin-top:8px">'+notes.join(' ')+'</div>';
+}
+function acctPositions(d){var c=d.currency||'$',P=d.positions||[];
+  return '<div class="card"><h2>Open positions · '+P.length+'</h2>'+(P.length?P.map(function(p){var pc=p.pnl==null?'':p.pnl>0?'pos2':p.pnl<0?'neg2':'';return '<div class="pos"><div class="row"><b>'+esc(p.side||'LONG')+' '+esc(p.name||p.symbol)+'</b><span class="num '+pc+'">'+(p.pnl==null?'–':(p.pnl>0?'+':p.pnl<0?'−':'')+c+num(Math.abs(p.pnl),Math.abs(p.pnl)<100?2:0))+(p.pnlPct!=null?' · '+(p.pnlPct*100).toFixed(2)+'%':'')+'</span></div><div class="sub num">in '+c+num(p.entry,2)+' · now '+(p.price==null?'–':c+num(p.price,2))+(p.stop!=null?' · stop '+num(p.stop,2):'')+(p.tp!=null?' · target '+num(p.tp,2):'')+(p.strategy?' · '+esc(p.strategy):'')+(p.openTs?' · opened '+istMs(p.openTs):'')+'</div></div>'}).join(''):'<div class="sub">No open positions.</div>')+'</div>'}
+function acctTrades(d){var c=d.currency||'$',T=d.trades||[];
+  return '<div class="card"><h2>Closed trades (IST)</h2>'+(T.length?'<div class="hint" style="margin-bottom:6px">Latest '+T.length+', newest first. Search, filters and CSV export are in <a href="#trades" data-tab="trades">Order history</a>.</div>'+T.map(function(t){var pc=t.pnl>0?'pos2':t.pnl<0?'neg2':'';return '<div class="pos"><div class="row"><b>'+esc(t.dir)+' '+esc(t.symbol)+(t.legs?' <span class="mut">· '+t.legs+' legs</span>':'')+'</b><span class="num '+pc+'">'+(t.pnl>0?'+':t.pnl<0?'−':'')+c+num(Math.abs(t.pnl),Math.abs(t.pnl)<100?2:0)+(t.pnlPct!=null?' · '+(t.pnlPct*100).toFixed(2)+'%':'')+'</span></div><div class="sub num">'+istMs(t.openTs)+' → '+istMs(t.closeTs)+' · '+esc(t.strategy||'')+' · '+esc(t.reason||'')+(t.fees?' · fees '+c+num(t.fees,2):'')+'</div></div>'}).join(''):'<div class="sub">No closed trades yet.</div>')+'</div>'}
+function acctLog(d){var G=d.log||[];
+  return '<div class="card"><h2>Activity log (IST)</h2>'+(G.length?'<div class="scroll"><table><tr><th>Time</th><th>Agent</th><th>Detail</th></tr>'+G.map(function(l){return '<tr><td class="num">'+istMs(l.ts)+'</td><td>'+esc(l.agent||'')+'</td><td class="'+(l.level==='error'||l.level==='crit'?'neg2':'')+'">'+esc(l.msg)+'</td></tr>'}).join('')+'</table></div>':'<div class="sub">Nothing logged yet.</div>')+'</div>'}
+function acctSettings(d){
+  var h=fBookEdit({slot:d.slot,currency:d.currency,edit:d.edit},true)||'<div class="sub">This account has no editable amounts.</div>';
+  h='<div class="card"><h2>Amounts</h2>'+h+'</div>';
+  h+='<div class="card" style="margin-top:8px"><h2>Admin actions</h2><div class="sub" style="margin-bottom:8px">Each action asks for your admin token and a confirmation.</div><div class="fbtns">'+
+    (d.paused?'<button data-adm="resume" data-slot="'+esc(d.slot)+'">Resume trading</button>':'<button data-adm="pause" data-slot="'+esc(d.slot)+'">Pause trading</button>')+
+    '<button data-adm="closeall" data-slot="'+esc(d.slot)+'">Close all positions</button><button data-adm="reset" data-slot="'+esc(d.slot)+'" style="color:var(--neg,#d55e00)">Reset account</button></div>'+
+    '<div class="hint" style="margin-top:8px">Pause stops new trades; open positions still follow their stops. Reset starts this account over from its start amount and wipes its trade history.</div></div>';
+  return h;
+}
+function acctPaint(force){
+  var el=$('#acctroot');if(!el)return;
+  if(!force&&scrolling()){DIRTY.acct=1;return}DIRTY.acct=0;
+  if(!force&&LAB.asub==='settings'&&el.contains(document.activeElement)&&document.activeElement.tagName==='INPUT')return;   /* never wipe a field being typed in */
+  var slot=LAB.acct,c=PRO.acct[slot],d=c&&c.d,sub=LAB.asub||'overview',h=acctHead(slot,sub);
+  if(!d)h+='<div class="skel" style="height:220px"></div>';
+  else if(d.error)h+='<div class="card sub">'+esc(d.error)+'</div>';
+  else if(!d.ready)h+='<div class="card"><h2>'+esc(d.label)+'</h2><div class="sub">Not running yet'+(d.note?': '+esc(d.note):'')+'.</div></div>';
+  else{h+='<div class="hint" style="margin:-2px 2px 8px"><b style="color:var(--ink)">'+esc(d.label)+'</b></div>'+({overview:acctOverview,positions:acctPositions,trades:acctTrades,log:acctLog,settings:acctSettings}[sub]||acctOverview)(d);document.title='PaperBot · '+slotShort(d.label)}
+  if(el.__h===h&&el.firstElementChild)return;el.__h=h;setHTML(el,h);chipIntoView(el,'acct:'+slot);
+}
+function acctTab(){
+  if(!LAB.acct){var bs=bookSlots();LAB.acct=bs.length?bs[0].slot:'nse'}
+  if(!$('#acctroot')){$('#view').innerHTML='<div id="acctroot"></div>';acctPaint(true)}
+  acctLoad(LAB.acct,false);
+  if(!PRO.funds&&!PRO.fundsBusy){PRO.fundsBusy=true;jf('/api/funds').then(function(j){PRO.funds=j;PRO.fundsAt=Date.now();PRO.fundsBusy=false;if(ui.tab==='acct')acctPaint(true)}).catch(function(){PRO.fundsBusy=false})}
+}
+setInterval(function(){if(ui.tab==='acct')acctTab()},8000);
+function adminPost(path,okMsg){var tk=labToken();if(!tk)return Promise.resolve(null);return fetch(path,{method:'POST',headers:{'x-admin-token':tk}}).then(function(r){if(r.status===401){try{sessionStorage.removeItem('pbtoken')}catch(e){}say('Wrong or missing admin token (ADMIN_TOKEN on Render).');return null}return r.json()}).then(function(j){if(j)say(okMsg);return j}).catch(function(){say('Could not reach the server');return null})}
+document.addEventListener('click',function(e){var t=e.target;if(!t.closest)return;var x;
+  if(ui.tab==='acct'){
+    if((x=t.closest('[data-acsw]'))){LAB.acct=x.getAttribute('data-acsw');try{history.replaceState(null,'','#'+tabHash())}catch(er){}acctPaint(true);acctLoad(LAB.acct,true);window.scrollTo(0,0);return}
+    if((x=t.closest('[data-asub2]'))){LAB.asub=x.getAttribute('data-asub2');try{localStorage.setItem('paperbot4:asub',LAB.asub)}catch(er){}acctPaint(true);return}
+  }
+  if((x=t.closest('[data-adm]'))){var act=x.getAttribute('data-adm'),sl=x.getAttribute('data-slot'),nm=slotShort(((PRO.acct[sl]||{}).d||{}).label||sl);
+    var q={pause:'Pause new trades in '+nm+'?',resume:'Resume trading in '+nm+'?',closeall:'Close every open position in '+nm+' at the current price?',reset:'Reset '+nm+'? Its trade history and P&L are wiped and it starts again from its start amount. This cannot be undone.'}[act];
+    if(!q||!window.confirm(q))return;
+    adminPost('/api/'+act+'?bot='+encodeURIComponent(sl),{pause:'Paused',resume:'Resumed',closeall:'Positions closed',reset:'Account reset'}[act]).then(function(){acctLoad(sl,true);PRO.fundsAt=0});return}
+});
+
+/* ---------- bot pages get a Settings tab too (shared AI Lab amounts + LLM switch) ---------- */
+if(!BSUBS.some(function(x){return x[0]==='settings'}))BSUBS.push(['settings','Settings']);
+function bpSettings(L,b){
+  if(!PRO.funds&&!PRO.fundsBusy){PRO.fundsBusy=true;jf('/api/funds').then(function(j){PRO.funds=j;PRO.fundsAt=Date.now();PRO.fundsBusy=false;if(ui.tab==='bot')botPgPaint(true)}).catch(function(){PRO.fundsBusy=false})}
+  var h=PRO.funds?fLabEdit(PRO.funds,true):'<div class="skel" style="height:200px"></div>';
+  h+='<div class="hint" style="margin:6px 2px">These amounts are shared by all five AI Lab bots so they stay comparable.</div>';
+  if(b.id==='B'||b.id==='C'||b.id==='C0'){var l=L.llm||{};h+='<div class="card" style="margin-top:8px"><h2>LLM</h2><div class="sub" style="margin-bottom:8px">'+(l.paused?'Paused: no new LLM entries, reviews or lessons. Open trades still exit on their stop or target.':l.configured?'Running · '+(l.calls||0)+' calls today.':'No API key set on the server.')+'</div><button data-llm="'+(l.paused?'resume':'pause')+'">'+(l.paused?'Resume LLM bots':'Pause LLM bots')+'</button></div>'}
+  return h;
+}
+(function(){var _bp=botPgPaint;botPgPaint=function(force){
+  if(LAB.bsub==='settings'){var el=$('#botpgroot'),L=LAB.d;if(!el||!L||!L.bots)return _bp(force);
+    if(!force&&el.contains(document.activeElement)&&document.activeElement.tagName==='INPUT')return;
+    var ids=L.bots.map(function(x){return x.id});if(!LAB.bot||ids.indexOf(LAB.bot)<0)LAB.bot=ids[0];var b=L.bots.filter(function(x){return x.id===LAB.bot})[0];
+    var h=bpHead(L,b,LAB.mk,'settings')+bpSettings(L,b);if(el.__h===h&&el.firstElementChild)return;el.__h=h;setHTML(el,h);chipIntoView(el,'bot:'+b.id);return}
+  return _bp(force)};window.botPgPaint=botPgPaint})();
+
+/* ================= Activity: one feed of every open position and closed trade, all accounts ================= */
+try{APP.actk=localStorage.getItem('paperbot4:actk')||'open'}catch(e){APP.actk='open'}
+function actClosed(){
+  var out=[],L=LAB.d;
+  if(L)(L.trades||[]).forEach(function(t){out.push({ts:t.closeT*1000,src:'AI Lab · bot '+t.bot,col:BOTCOL[t.bot]||'#555',mk:t.book==='IN'?'IN':'CRYPTO',name:t.name||t.sym,side:t.side,cur:t.cur,pnl:t.pnl,r:t.r,pct:null,why:t.reason,attr:'data-tab="bot" data-bot="'+esc(t.bot)+'" data-botmk-go="'+t.book+'" data-bsub-go="trades"'})});
+  Object.keys(PRO.acct).forEach(function(sl){var d=PRO.acct[sl].d;if(!d||!d.trades)return;d.trades.forEach(function(t){out.push({ts:t.closeTs||0,src:'Paper book · '+slotShort(d.label),col:'#8a8a84',mk:SLOTMK[sl]||'IN',name:t.symbol,side:t.dir,cur:d.currency,pnl:t.pnl,r:null,pct:t.pnlPct,why:t.reason,attr:'data-tab="acct" data-acct="'+esc(sl)+'" data-asub="trades"'})})});
+  return out.sort(function(a,b){return b.ts-a.ts});
+}
+function actRow(p,closed){
+  var n=function(x){return x==null?'–':p.cur+num(x,Math.abs(x)<100?2:0)},c=p.pnl==null?'':p.pnl>0?'pos2':p.pnl<0?'neg2':'';
+  return '<button class="acr" '+(p.attr||'')+'><span class="pdot" style="flex:0 0 auto;width:10px;height:10px;border-radius:3px;background:'+p.col+'"></span><span class="m"><b>'+esc(p.side||'')+' '+esc(p.name)+'</b><small>'+esc(p.src)+(closed?' · '+istMs(p.ts)+(p.why?' · '+esc(p.why):''):' · in '+n(p.entry)+' · now '+n(p.price))+'</small></span><span class="r"><b class="'+c+'">'+(p.pnl==null?'–':(p.pnl>0?'+':p.pnl<0?'−':'')+p.cur+num(Math.abs(p.pnl),Math.abs(p.pnl)<100?2:0))+'</b><small class="'+c+'">'+(p.r!=null?rfmt(p.r):p.pct!=null?(p.pct>0?'+':p.pct<0?'−':'')+Math.abs(p.pct*100).toFixed(2)+'%':'')+'</small></span></button>';
+}
+function actPaint(force){
+  var el=$('#actroot');if(!el)return;if(!force&&scrolling()){DIRTY.act=1;return}DIRTY.act=0;
+  var k=APP.actk,mk=APP.acmk||'ALL',h='';
+  var op=allPos().map(function(p){p.attr=p.slot?'data-tab="acct" data-acct="'+esc(p.slot)+'" data-asub="positions"':(p.src.indexOf('AI Lab · bot ')===0?'data-tab="bot" data-bot="'+esc(p.src.slice(13))+'" data-botmk-go="'+p.mk+'" data-bsub-go="positions"':'');return p});
+  var cl=actClosed(),f=function(a){return a.filter(function(x){return mk==='ALL'||x.mk===mk})},O=f(op),C=f(cl);
+  var upnl={};O.forEach(function(p){if(p.pnl!=null)upnl[p.cur]=(upnl[p.cur]||0)+p.pnl});
+  h+='<div class="actot">'+'<div class="x"><div class="k">Open positions</div><div class="v">'+O.length+'</div><div class="p">'+(Object.keys(upnl).map(function(c){return '<span class="'+plCls(upnl[c])+'">'+(upnl[c]>=0?'+':'−')+c+num(Math.abs(upnl[c]),Math.abs(upnl[c])<100?2:0)+'</span>'}).join(' · ')||'open P&amp;L –')+'</div></div>'+
+    '<div class="x"><div class="k">Closed trades listed</div><div class="v">'+C.length+'</div><div class="p" style="color:var(--ink2);font-weight:500">'+(C.length?Math.round(C.filter(function(x){return x.pnl>0}).length/C.length*100)+'% winners':'–')+'</div></div></div>';
+  h+='<div class="acfil">'+[['open','Open'],['closed','Closed']].map(function(o){return '<button data-actk="'+o[0]+'" class="'+(k===o[0]?'on':'')+'">'+o[1]+'</button>'}).join('')+'</div>';
+  h+='<div class="acfil">'+ACMK.map(function(o){return '<button data-acmk="'+o[0]+'" class="'+(mk===o[0]?'on':'')+'">'+o[1]+'</button>'}).join('')+'</div>';
+  var rows=k==='open'?O.slice(0,80).map(function(p){return actRow(p,false)}):C.slice(0,80).map(function(p){return actRow(p,true)});
+  h+='<div class="aclist" style="margin-top:6px">'+(rows.join('')||'<div class="sub" style="padding:14px">'+(k==='open'?'No open positions'+(mk==='ALL'?'':' in this market')+'.':'No closed trades yet'+(Object.keys(PRO.acct).length?'':' — loading…'))+'</div>')+'</div>';
+  h+='<div class="hint" style="margin:10px 2px">'+(k==='closed'?'Latest trades of every account, newest first. Tap a trade to open its account. For search, filters and CSV per paper book, use Order history.':'Tap a position to open its account.')+'</div>';
+  if(el.__h===h&&el.firstElementChild)return;el.__h=h;setHTML(el,h);
+}
+function actTab(){
+  if(!$('#actroot')){$('#view').innerHTML='<div id="actroot"></div>';actPaint(true)}
+  if(Date.now()-LAB.at>8000)labFetch();posFetch();
+  if(!PRO.feedsBusy&&Date.now()-(PRO.feedsAt||0)>15000){PRO.feedsBusy=true;jf('/api/feeds').then(function(j){PRO.feeds=j;PRO.feedsAt=Date.now();PRO.feedsBusy=false}).catch(function(){PRO.feedsBusy=false})}
+  if(APP.actk==='closed'){var bs=bookSlots();if(!bs.length&&!PRO.fundsBusy){PRO.fundsBusy=true;jf('/api/funds').then(function(j){PRO.funds=j;PRO.fundsAt=Date.now();PRO.fundsBusy=false;actTab()}).catch(function(){PRO.fundsBusy=false})}
+    bs.forEach(function(b){var c=PRO.acct[b.slot];if(!c||!c.at||Date.now()-c.at>30000)acctLoad(b.slot,false)})}
+  actPaint();
+}
+setInterval(function(){if(ui.tab==='activity')actTab()},6000);
+document.addEventListener('click',function(e){var t=e.target;if(!t.closest||ui.tab!=='activity')return;var x;
+  if((x=t.closest('[data-actk]'))){APP.actk=x.getAttribute('data-actk');try{localStorage.setItem('paperbot4:actk',APP.actk)}catch(er){}actTab();actPaint(true);return}
+  if((x=t.closest('[data-acmk]'))){setTimeout(function(){actPaint(true)},0)}
+});
+
+/* ================= Home: what you own, what needs attention, what is happening ================= */
+function attention(){
+  var a=[],L=LAB.d,F=PRO.funds;
+  if(F&&F.books)F.books.forEach(function(b){if(b.practice)return;if(!b.ready)a.push(['warn',slotShort(b.label)+' is not running','acct',b.slot]);else if(b.halted)a.push(['crit',slotShort(b.label)+' halted by its drawdown limit','acct',b.slot])});
+  if(L&&L.llm){if(!L.llm.configured)a.push(['warn','LLM bots have no API key — only rule bots trade','lab']);else if(L.llm.paused)a.push(['warn','LLM bots are paused','lab'])}
+  var U=PRO.feeds&&PRO.feeds.upstox;if(U&&U.configured&&U.tokenRejected)a.push(['crit','India broker feed token was rejected','system']);
+  var Y=PRO.feeds&&PRO.feeds.yahoo;if(Y&&Y.cooling>0)a.push(['warn','Yahoo data is rate-limited for '+Y.cooling+'s','system']);
+  return a;
+}
+homePaint=function(){
+  var el=$('#homeroot');if(!el)return;if(scrolling()){DIRTY.home=1;return}
+  if(!PRO.fundsBusy&&(!PRO.funds||Date.now()-(PRO.fundsAt||0)>10000)&&!liveFresh()){PRO.fundsBusy=true;jf('/api/funds').then(function(j){PRO.funds=j;PRO.fundsAt=Date.now();PRO.fundsBusy=false;if(ui.tab==='home')homePaint()}).catch(function(){PRO.fundsBusy=false})}
+  posFetch();wlFetch();
+  var all=accounts(),T={},h='',c0=nseClock();all.forEach(function(a){if(a.eq==null)return;var t=T[a.cur]||(T[a.cur]={e:0,s:0,n:0});t.e+=a.eq;t.s+=a.start;t.n++});
+  h+='<div class="actot">'+(Object.keys(T).length?Object.keys(T).map(function(c){var t=T[c],pl=t.e-t.s;return '<button class="x" data-tab="bots" data-acmk-go="'+(c==='₹'?'IN':'ALL')+'" style="text-align:left;font:inherit;color:inherit"><div class="k">All '+(c==='₹'?'rupee':'dollar')+' accounts · '+t.n+'</div><div class="v">'+money(c,t.e)+'</div><div class="p '+plCls(pl)+'">'+(pl>=0?'+':'−')+c+num(Math.abs(pl),Math.abs(pl)<100?2:0)+' · '+plPct(t.s?pl/t.s:0)+'</div></button>'}).join(''):'<div class="skel" style="height:90px"></div><div class="skel" style="height:90px"></div>')+'</div>';
+  h+='<div class="chips" style="margin:0 0 12px"><span class="cp"><span class="dot '+(c0.open?'on':'warn')+'" style="margin:0"></span>India '+(c0.open?'open':'closed')+'</span><span class="cp"><span class="dot on" style="margin:0"></span>Crypto 24×7</span><span class="cp"><span class="dot '+(liveFresh()?'on':'warn')+'" style="margin:0"></span>'+(liveFresh()?'Live updates':'Updating every few seconds')+'</span></div>';
+  var at=attention();
+  if(at.length)h+='<div class="acsec"><h3>Needs attention</h3><span>'+at.length+'</span></div><div class="aclist">'+at.map(function(x){return '<button class="acr" data-tab="'+x[2]+'"'+(x[3]?' data-acct="'+esc(x[3])+'"':'')+'><span class="dot '+x[0]+'" style="margin:0 4px"></span><span class="m"><b style="white-space:normal">'+esc(x[1])+'</b></span><span class="chev">›</span></button>'}).join('')+'</div>';
+  var ps=allPos().sort(function(a,b){return Math.abs(b.pnl||0)-Math.abs(a.pnl||0)}).slice(0,5);
+  h+='<div class="acsec"><h3>Biggest open positions</h3><button class="bpback" data-tab="activity" style="padding:0">All '+allPos().length+' ›</button></div><div class="aclist">'+(ps.length?ps.map(function(p){p.attr=p.slot?'data-tab="acct" data-acct="'+esc(p.slot)+'" data-asub="positions"':'data-tab="activity"';return actRow(p,false)}).join(''):'<div class="sub" style="padding:14px">'+(LAB.d?'No open positions right now.':'Loading…')+'</div>')+'</div>';
+  var L=LAB.d,best=null,worst=null;all.forEach(function(a){if(a.pct==null)return;if(!best||a.pct>best.pct)best=a;if(!worst||a.pct<worst.pct)worst=a});
+  if(best&&worst&&best!==worst)h+='<div class="acsec"><h3>Leaders</h3><button class="bpback" data-tab="bots" style="padding:0">All accounts ›</button></div><div class="aclist">'+acRow(best)+acRow(worst)+'</div>';
+  var px=LAB.px;
+  h+='<div class="acsec"><h3>Watchlist</h3><button class="bpback" data-tab="charts" style="padding:0">Charts ›</button></div><div class="card wl" style="padding:4px 12px">'+(px&&px.length?px.slice(0,10).map(function(p){var up=p.chg>0,dn=p.chg<0;return '<div class="it" data-wl="'+esc(p.sym)+'"><div class="nm"><b>'+esc(p.name)+'</b><small>'+esc(p.sym)+' · '+(p.open?'open':'closed')+'</small></div><div class="px"><b>'+esc(p.cur)+num(p.price,p.price<100?2:0)+'</b><span class="'+(up?'pos2':dn?'neg2':'')+'">'+(p.chg==null?'–':(up?'▲ +':dn?'▼ −':'')+Math.abs(p.chg*100).toFixed(2)+'%')+'</span></div></div>'}).join(''):'<div class="skel" style="height:90px"></div>')+'</div>';
+  var V=PRO.bt&&PRO.bt.result&&PRO.bt.result.verdict;
+  h+='<button class="fundlink" data-tab="bt" style="margin-top:12px">Backtest: '+(V?'no strategy has a proven edge yet — see why':'see which strategies survive real costs')+' <span>→</span></button>';
+  if(el.__h===h&&el.firstElementChild)return;el.__h=h;setHTML(el,h);
+};
+document.addEventListener('click',function(e){var x=e.target.closest&&e.target.closest('[data-acmk-go]');if(x){APP.acmk=x.getAttribute('data-acmk-go');APP.acty='ALL'}},true);
+
+/* ================= AI Lab: secondary sections fold away (state kept across live redraws) ================= */
+LAB.fold=LAB.fold||{};
+function foldWrap(id,title,html){return '<details class="fold" data-fold="'+id+'"'+(LAB.fold[id]?' open':'')+'><summary>'+title+'</summary>'+html+'</details>'}
+document.addEventListener('toggle',function(e){var d=e.target;if(d&&d.getAttribute&&d.getAttribute('data-fold'))LAB.fold[d.getAttribute('data-fold')]=d.open},true);
+(function(){var a=labScan,b=labTg,c=labDecisions,d=labLessons;LAB.rawLessons=d;
+  labScan=function(D){return foldWrap('scan','Live market scan',a(D))};labTg=function(D){return foldWrap('tg','Telegram channel follower (bot D)',b(D))};labDecisions=function(D){return foldWrap('dec','Decision log, all bots',c(D))};labLessons=function(D){return foldWrap('les','Lessons learned (bot C)',d(D))};
+  var _lp=labPositions;labPositions=function(D){return foldWrap('lpos','Open positions and recent trades, all bots',_lp(D))};
+})();
+
+/* ================= Visual polish: one calm broker-style look across pages ================= */
+(function(){var st=document.createElement('style');st.textContent=
+'#view .card{border-radius:16px}#view .card h2{font-size:12.5px;letter-spacing:.4px;color:var(--ink2);font-weight:700}'+
+'.acsec h3{text-transform:none;font-size:15px;letter-spacing:0;font-weight:750;color:var(--ink)}'+
+'.actot .x{display:block;width:100%;cursor:pointer}'+
+'details.fold{border:1px solid var(--line);border-radius:16px;background:var(--card);margin-top:8px;overflow:hidden}details.fold>summary{list-style:none;cursor:pointer;padding:14px;font-weight:700;font-size:14px;display:flex;justify-content:space-between;align-items:center}details.fold>summary::-webkit-details-marker{display:none}details.fold>summary:after{content:"＋";color:var(--ink2);font-weight:500}details.fold[open]>summary:after{content:"－"}details.fold>.card,details.fold>div>.card{border:0;border-top:1px solid var(--line);border-radius:0;margin:0!important}'+
+'.fundlink{width:100%}.bpback{cursor:pointer}'+
+(SERVER?'#ctrl{display:none!important}':'');document.head.appendChild(st)})();
 APPREADY=true;(function(){var h=hashTab();if(h&&TABS.some(function(t){return t[0]===h}))ui.tab=h})();renderTabs();try{render()}catch(e){}
 
 renderTabs();renderCtrl();

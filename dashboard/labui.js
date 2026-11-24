@@ -8,8 +8,8 @@ function hsRestore(root,saved){saved.forEach(function(x){var n=root;for(var i=0;
 function setHTML(el,h){var x=el.scrollLeft,s=hsSave(el);el.innerHTML=h;if(s.length)hsRestore(el,s);if(x)el.scrollLeft=x}
 document.addEventListener('scroll',function(){if(typeof SCROLLAT!=='undefined')SCROLLAT=Date.now()},{capture:true,passive:true});   /* element scrolls (tables, chip strips) do not bubble to window: capture them so redraws wait */
 /* hash routing: #bot/C opens the AI Lab bot page of bot C; every other tab is its plain id */
-function hashTab(){var p=location.hash.slice(1).split('/');if(p[0]==='bot'&&p[1]&&/^[A-Za-z0-9]{1,4}$/.test(p[1])){LAB.bot=p[1];try{localStorage.setItem('paperbot4:labbot',p[1])}catch(e){}}return p[0]}
-function tabHash(){return ui.tab==='bot'&&LAB.bot?'bot/'+LAB.bot:ui.tab}
+function hashTab(){var p=location.hash.slice(1).split('/');if(p[0]==='bot'&&p[1]&&/^[A-Za-z0-9]{1,4}$/.test(p[1])){LAB.bot=p[1];try{localStorage.setItem('paperbot4:labbot',p[1])}catch(e){}}if(p[0]==='acct'&&p[1]&&/^[a-z0-9_]{1,20}$/.test(p[1]))LAB.acct=p[1];return p[0]}
+function tabHash(){return ui.tab==='bot'&&LAB.bot?'bot/'+LAB.bot:ui.tab==='acct'&&LAB.acct?'acct/'+LAB.acct:ui.tab}
 function lpct(x,d){return x==null?'–':(x*100).toFixed(d==null?1:d)+'%'}
 function lsgn(x,d){return x==null?'–':(x>0?'+':'')+x.toFixed(d==null?2:d)}
 function cls2(x){return x==null?'':x>0?'up':x<0?'dn':''}

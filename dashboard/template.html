@@ -643,14 +643,14 @@ function renderHeader(){
 }
 var ctrlSig='';
 function render(){
-  var solo=SERVER&&['home','bt','bots','funds','lab','charts','bot'].indexOf(ui.tab)>=0;
+  var solo=SERVER&&['home','bt','bots','funds','lab','charts','bot','acct','activity'].indexOf(ui.tab)>=0;
   if(ui.hover)return;
   if(!snap&&!solo){var vw0=$('#view');if(vw0&&!vw0.querySelector('#ldg')){vw0.innerHTML='<div id="ldg" class="card sub">Loading…</div>';LASTVIEW=null;LASTFIRST=null}return}   /* never leave the previous tab\'s page on screen while this one loads */
   var ae=document.activeElement;if(ae&&/INPUT|SELECT/.test(ae.tagName)&&$('#view').contains(ae))return;
   if(snap){var sg2=[ui.paused,ui.speed,ui.nextAdaptive,ui.armReset,ui.mode,ui.slot,SERVER&&snap&&snap.server?snap.server.slots.length:0].join();if(sg2!==ctrlSig){ctrlSig=sg2;renderCtrl()}
   renderHeader()}
-  var cc=$('#ctrl');if(cc)cc.style.display=(SERVER&&(ui.tab==='lab'||ui.tab==='charts'||ui.tab==='bot'||ui.tab==='home'||ui.tab==='bt'))?'none':'';
-  if(SERVER&&(ui.tab==='home'||ui.tab==='bt'||ui.tab==='bots'||ui.tab==='funds')){proTab();return}
+  var cc=$('#ctrl');if(cc)cc.style.display=SERVER?'none':'';
+  if(SERVER&&(ui.tab==='home'||ui.tab==='bt'||ui.tab==='bots'||ui.tab==='funds'||ui.tab==='acct'||ui.tab==='activity')){proTab();return}
   if(SERVER&&(ui.tab==='lab'||ui.tab==='charts'||ui.tab==='bot')){labTab();return}
   if(Date.now()-SCROLLAT<700)return; /* never rebuild the page under a finger / fling: it resets the scroll offset */
   var v={system:vSystem,strategies:vStrategies,setups:vSetups,overview:vOverview,market:vMarket,trades:vTrades,agents:vAgents,learning:vLearning,playbook:vPlaybook}[ui.tab]();
