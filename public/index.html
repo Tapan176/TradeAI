@@ -1127,14 +1127,14 @@ if(window.matchMedia&&matchMedia('(display-mode: standalone)').matches){var x=b(
 '.wrap{overflow-x:clip}.card,.kpi,.slotc,.bcard,.g2>*,.g3>*,.row>*,.hrow .x{min-width:0}',
 '.g2{grid-template-columns:minmax(0,1fr)}.g3{grid-template-columns:repeat(2,minmax(0,1fr))}@media(min-width:900px){.g2{grid-template-columns:repeat(2,minmax(0,1fr))}.g3{grid-template-columns:repeat(3,minmax(0,1fr))}}',
 '#homeroot div[style*="display:grid"],#botsroot div[style*="display:grid"]{grid-template-columns:minmax(0,1fr)}',
-'.card,.kpi .s,.hrow .x,.note,.sub{overflow-wrap:anywhere}.card table{overflow-wrap:normal}img,svg,canvas{max-width:100%}',
+'.card,.kpi .s,.hrow .x,.note,.sub{overflow-wrap:break-word}.chip{flex:0 0 auto;white-space:nowrap}.card table{overflow-wrap:normal}img,svg,canvas{max-width:100%}',
 '.row{flex-wrap:wrap}',
 /* --- app bar --- */
-'#appbar{display:none;position:sticky;top:0;z-index:40;align-items:center;justify-content:space-between;gap:8px;padding:calc(8px + env(safe-area-inset-top)) 12px 8px;background:var(--bg);border-bottom:1px solid var(--line)}',
+'#topbar{display:none;position:sticky;top:0;z-index:40;background:var(--bg);border-bottom:1px solid var(--line)}#appbar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:calc(8px + env(safe-area-inset-top)) 12px 6px}',
 '#appbar .l{display:flex;align-items:center;gap:10px;min-width:0}#appbar .logo{flex:0 0 auto;width:34px;height:34px;border-radius:10px;background:var(--ink);color:var(--bg);display:grid;place-items:center;font-weight:800;font-size:16px;letter-spacing:-.5px}',
 '#appbar b{font-size:16px;line-height:1.1;display:block}#appbar small{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
 '#appbar .r{display:flex;align-items:center;gap:6px}#appbar .r button{min-height:36px;min-width:36px;padding:0 9px;border-radius:10px;display:grid;place-items:center;font-size:17px;line-height:1}#appbar .paper{font-size:10px;font-weight:700;letter-spacing:.5px;border:1px solid var(--line);border-radius:999px;padding:3px 8px;background:var(--chip);white-space:nowrap}',
-'@media(max-width:639px){header,#banner{display:none!important}#appbar{display:flex}.wrap{padding:0 12px 96px}#view{min-height:60vh}}',
+'@media(max-width:639px){header,#banner{display:none!important}#topbar{display:block}.wrap{padding:0 12px 96px}#view{min-height:60vh}}',
 /* --- bottom nav (broker style) --- */
 '#bnav{padding:6px 6px calc(6px + env(safe-area-inset-bottom));box-shadow:0 -6px 24px rgba(0,0,0,.06)}#bnav button{gap:3px;font-size:10.5px;min-height:52px;position:relative;border-radius:12px}#bnav button svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}#bnav button.on{background:transparent;color:var(--ink)}#bnav button.on::before{content:"";position:absolute;top:-7px;left:28%;right:28%;height:3px;border-radius:0 0 3px 3px;background:var(--ink)}#bnav button.on svg{stroke-width:2.3}',
 /* --- hero + watchlist --- */
@@ -1147,11 +1147,22 @@ if(window.matchMedia&&matchMedia('(display-mode: standalone)').matches){var x=b(
 '.bcard .mid{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:10px}.bcard .eq{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}.bcard .pl{font-size:13px;font-weight:650;font-variant-numeric:tabular-nums}.bcard .bst{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.bcard .bst span{font-size:11px;color:var(--ink2);background:var(--chip);border-radius:7px;padding:2px 7px}',
 '.sect{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:14px 2px 8px}.sect h3{margin:0;font-size:13px;color:var(--ink2);text-transform:uppercase;letter-spacing:.5px;font-weight:650}',
 /* --- more sheet --- */
-'.mlist button{display:flex;align-items:center;gap:12px;width:100%;text-align:left;margin:6px 0;padding:11px 12px;border-radius:13px;min-height:0}.mlist .ic{flex:0 0 auto;width:34px;height:34px;border-radius:10px;background:var(--chip);display:grid;place-items:center}.mlist .ic svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.mlist small{display:block;color:var(--ink2);font-size:11.5px}.mlist b{font-size:14px}'
+'.mlist button{display:flex;align-items:center;gap:12px;width:100%;text-align:left;margin:6px 0;padding:11px 12px;border-radius:13px;min-height:0}.mlist .ic{flex:0 0 auto;width:34px;height:34px;border-radius:10px;background:var(--chip);display:grid;place-items:center}.mlist .ic svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.mlist small{display:block;color:var(--ink2);font-size:11.5px}.mlist b{font-size:14px}',
+/* --- sub navigation strip, dropdowns, position rows --- */
+'#subnav{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px 12px 8px}#subnav::-webkit-scrollbar{display:none}#subnav:empty{display:none}#subnav button{flex:0 0 auto;white-space:nowrap;border-radius:999px;min-height:32px;padding:4px 14px;font-size:13px}',
+'.msel{display:flex;align-items:center;gap:8px;width:100%}.msel>span{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2);flex:0 0 auto}',
+'.msel select,.chsel select,.sect select{appearance:none;-webkit-appearance:none;font:inherit;font-size:14px;color:var(--ink);background:var(--card) url("data:image/svg+xml;utf8,<svg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%277%27 viewBox=%270 0 12 7%27><path d=%27M1 1l5 5 5-5%27 fill=%27none%27 stroke=%27%23888%27 stroke-width=%271.8%27 stroke-linecap=%27round%27/></svg>") no-repeat right 12px center;border:1px solid var(--line);border-radius:12px;padding:8px 34px 8px 12px;min-height:40px;min-width:0;max-width:100%;flex:1 1 0;text-overflow:ellipsis}',
+'.sect select{flex:0 1 auto;min-height:34px;padding:4px 30px 4px 12px;font-size:13px;width:auto}',
+'#ctrl .r1{width:100%}#ctrl .r1 .seg{flex-wrap:wrap}',
+'.chsel{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:8px;margin-bottom:8px}',
+'.chq{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:2px 2px 8px}.chq b{font-size:15px}.chq .num{font-size:20px;font-weight:700}',
+'.chchips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px}.chchips::-webkit-scrollbar{display:none}',
+'.prow{display:flex;align-items:center;gap:10px;padding:10px 2px;border-top:1px solid var(--line)}.prow:first-child{border-top:0}.prow .pdot{flex:0 0 auto;width:10px;height:10px;border-radius:3px}.prow .pm{min-width:0;flex:1}.prow .pm b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.prow .pm small{display:block;font-size:11.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.prow .pv{flex:0 0 auto;text-align:right;font-variant-numeric:tabular-nums}.prow .pv b{display:block;font-size:14px}.prow .pv small{font-size:11.5px}',
+'.slotx{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}'
 ].join('\n');document.head.appendChild(s);
 try{history.scrollRestoration='manual'}catch(e){}
 var ab=document.createElement('div');ab.id='appbar';ab.innerHTML='<div class="l"><span class="logo">P</span><div style="min-width:0"><b>PaperBot</b><small id="abstat">connecting…</small></div></div><div class="r"><span class="paper">PAPER</span><button id="abinst" title="Install as an app" style="display:none">⬇</button><button id="abtheme" title="Theme">◐</button><button id="absearch" title="Search">⌕</button></div>';
-var w=document.querySelector('.wrap');w.parentNode.insertBefore(ab,w)})();
+var tb=document.createElement('div');tb.id='topbar';tb.appendChild(ab);var sn=document.createElement('nav');sn.id='subnav';sn.setAttribute('aria-label','Section');tb.appendChild(sn);var w=document.querySelector('.wrap');w.parentNode.insertBefore(tb,w)})();
 
 /* ---------- icons ---------- */
 var IC={home:'<path d="M3 11l9-8 9 8"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/>',
@@ -1173,18 +1184,22 @@ refresh:'<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>'};
 function ico(k){return '<svg viewBox="0 0 24 24" aria-hidden="true">'+(IC[k]||'')+'</svg>'}
 
 /* ---------- navigation: 5-tab broker bar; Bots groups Bots/AI Lab/Overview; everything else lives under More ---------- */
-if(SERVER&&!TABS.some(function(t){return t[0]==='bots'}))TABS.splice(1,0,['bots','Bots']);
+if(SERVER&&!TABS.some(function(t){return t[0]==='bots'}))TABS.splice(1,0,['bots','My bots']);
 TABICON.bots='✦';
-var APPREADY;
+var APPREADY,APP={mk:'ALL',chmk:'ALL',navStarted:false};
+/* nav groups: bottom bar shows the group; the sub-strip under the app bar moves between its pages */
+var GROUPS=[{id:'home',label:'Home',ic:'home',tabs:['home']},{id:'markets',label:'Markets',ic:'charts',tabs:['charts','market','setups']},{id:'bots',label:'Bots',ic:'bots',tabs:['bots','lab','overview','strategies']},{id:'orders',label:'Orders',ic:'trades',tabs:['trades']}];
+function grpOf(tab){for(var i=0;i<GROUPS.length;i++)if(GROUPS[i].tabs.indexOf(tab)>=0)return GROUPS[i];return null}
+var TABNAME={home:'Home',charts:'Charts',market:'Segments',setups:'Setups',bots:'My bots',lab:'AI Lab',overview:'Paper books',strategies:'Strategies',trades:'Trades',bt:'Backtest',system:'System'};
+TABS.forEach(function(t){if(TABNAME[t[0]])t[1]=TABNAME[t[0]]});
 function renderTabs(){
   if(!APPREADY)return;
-  var NAV5=[['home','Home','home'],['charts','Markets','charts'],['bots','Bots','bots'],['trades','Orders','trades']],BOTSGRP=['bots','lab','overview'];
-  if(!TABS.some(function(t){return t[0]==='bots'}))TABS.splice(1,0,['bots','Bots']);
   $('#tabs').innerHTML=TABS.map(function(t){return '<button data-tab="'+t[0]+'" class="'+(ui.tab===t[0]?'on':'')+'">'+t[1]+'</button>'}).join('');
-  var inMain=function(id){return id==='bots'?BOTSGRP.indexOf(ui.tab)>=0:ui.tab===id};
-  var nav=NAV5.map(function(x){return '<button data-tab="'+x[0]+'" class="'+(inMain(x[0])?'on':'')+'" aria-label="'+x[1]+'">'+ico(x[2])+x[1]+'</button>'}).join('')+'<button data-more="1" class="'+(NAV5.some(function(x){return inMain(x[0])})?'':'on')+'" aria-label="More">'+ico('more')+'More</button>';
+  var g=grpOf(ui.tab);
+  var nav=GROUPS.map(function(x){return '<button data-tab="'+x.tabs[0]+'" class="'+(g===x?'on':'')+'" aria-label="'+x.label+'"'+(g===x?' aria-current="page"':'')+'>'+ico(x.ic)+x.label+'</button>'}).join('')+'<button data-more="1" class="'+(g?'':'on')+'" aria-label="More">'+ico('more')+'More</button>';
   var n=$('#bnav');if(n)n.innerHTML=nav;
-  try{if(location.hash.slice(1)!==ui.tab)history.replaceState(null,'','#'+ui.tab)}catch(e){}
+  var sn=$('#subnav');if(sn){var list=g?g.tabs:(ui.tab==='bt'||ui.tab==='system'?['bt','system']:[]);sn.innerHTML=list.length>1?list.map(function(id){var t=TABS.filter(function(x){return x[0]===id})[0];return t?'<button data-tab="'+id+'" class="'+(ui.tab===id?'on':'')+'">'+t[1]+'</button>':''}).join(''):'';var on=sn.querySelector('.on');if(on&&on.scrollIntoView)try{on.scrollIntoView({inline:'center',block:'nearest'})}catch(e){}}
+  try{if(location.hash.slice(1)!==ui.tab){history[APP.navStarted?'pushState':'replaceState'](null,'','#'+ui.tab)}APP.navStarted=true}catch(e){}
   document.title='PaperBot · '+((TABS.filter(function(x){return x[0]===ui.tab})[0]||[0,''])[1]);
   if(window.abUpdate)abUpdate();
 }
@@ -1208,13 +1223,14 @@ function moreItem(id,t,d,ic){return '<button data-tab="'+id+'"><span class="ic">
 function moreSheet(){
   var inst=$('#install'),canInst=inst&&inst.style.display!=='none';
   drawer('<div class="mlist"><h3 style="margin:10px 2px 4px">More</h3>'+
+    moreItem('bt','Backtest','Which strategies survive real costs','bt')+
+    moreItem('system','System','Agents, learning, feeds and activity log','system')+
+    '<h3 style="margin:14px 2px 2px;color:var(--ink2);font-size:12px;text-transform:uppercase;letter-spacing:.5px">Jump to</h3>'+
     moreItem('lab','AI Lab','Bots A / B / C / C0 with live decisions','lab')+
     moreItem('overview','Paper books','Per-market bots: India, F&amp;O, stocks, global, commodities, crypto','overview')+
-    moreItem('bt','Backtest','Which strategies survive real costs','bt')+
-    moreItem('market','Market','Segments, regimes and signals','market')+
+    moreItem('market','Segments','Segments, regimes and signals','market')+
     moreItem('strategies','Strategies','Strategy registry and scores','strategies')+
     moreItem('setups','Setups','Trade setups scanner','setups')+
-    moreItem('system','System','Agents, learning and activity log','system')+
     '<button id="m_search"><span class="ic">'+ico('search')+'</span><span><b>Search</b><small>Jump to a tab, market or chart</small></span></button>'+
     '<button id="m_refresh"><span class="ic">'+ico('refresh')+'</span><span><b>Refresh data</b><small>Re-fetch everything now</small></span></button>'+
     '<button id="m_theme"><span class="ic">'+ico('theme')+'</span><span><b>Theme</b><small>Light / dark</small></span></button>'+
@@ -1223,7 +1239,7 @@ function moreSheet(){
 document.addEventListener('click',function(e){var t=e.target;if(!t.closest)return;
   if(t.closest('[data-more]')){e.stopImmediatePropagation();moreSheet();return}
   if(t.closest('#m_search')){closeDrawer();palOpen();return}
-  if(t.closest('#m_refresh')){closeDrawer();PRO.feedsAt=0;PRO.btAt=0;LAB.at=0;LAB.pxAt=0;render();say('Refreshing…');return}
+  if(t.closest('#m_refresh')){closeDrawer();PRO.feedsAt=0;PRO.btAt=0;PRO.posAt=0;LAB.at=0;LAB.pxAt=0;render();say('Refreshing…');return}
   if(t.closest('#m_theme')){var b=$('#theme');if(b)b.click();return}
   if(t.closest('#m_inst')){closeDrawer();var i=$('#install');if(i)i.click();return}
   var hg=t.closest('[data-botmk-go]');if(hg)LAB.mk=hg.getAttribute('data-botmk-go');
@@ -1262,18 +1278,40 @@ function botCard(b,mk){
     '<div class="mid"><span class="eq">'+money(bk.cur,bk.equity)+'</span><span class="pl '+plCls(bk.pnlPct)+'">'+plPct(bk.pnlPct)+'</span></div>'+
     '<div class="bst"><span>'+(m.trades||0)+' trades</span><span>hit '+(m.hit==null?'–':Math.round(m.hit*100)+'%')+'</span><span>exp '+(m.expR==null?'–':rfmt(m.expR))+'</span><span>'+b.open+' open</span>'+(b.stats&&b.stats.vetoed?'<span>'+b.stats.vetoed+' vetoed</span>':'')+'</span></div></button>';
 }
+var MKOPT=[['ALL','All markets'],['IN','India'],['CRYPTO','Crypto'],['GLOBAL','Global & commodities']];
+var SLOTMK={nse:'IN',india:'IN',fno:'IN',instocks:'IN',crypto:'CRYPTO',gstocks:'GLOBAL',macro:'GLOBAL'};
+var LABSLOT={nse:'IN',crypto:'CRYPTO'};
+function slotShort(l){return String(l||'').split(' · ')[0].replace(/ \(live\)$/,'')}
+/* every open position: AI Lab bots + every paper-book slot, tagged by market */
+function allPos(){
+  var out=[],L=LAB.d;
+  if(L)(L.positions||[]).forEach(function(p){out.push({src:'AI Lab · bot '+p.bot,col:BOTCOL[p.bot]||'#555',mk:p.cur==='₹'?'IN':'CRYPTO',name:p.name||p.sym,side:p.side,cur:p.cur,entry:p.entry,price:p.last,stop:p.stop,pnl:p.pnl,r:p.r,pct:null})});
+  (PRO.pos||[]).forEach(function(s){(s.positions||[]).forEach(function(p){out.push({src:'Paper book · '+slotShort(s.label),col:'#8a8a84',mk:SLOTMK[s.slot]||'OTHER',slot:s.slot,name:p.name||p.symbol,side:p.side,cur:s.currency,entry:p.entry,price:p.price,stop:p.stop,pnl:p.pnl,r:null,pct:p.pnlPct})})});
+  return out;
+}
+function posRow(p){
+  var n=function(x){return x==null?'–':p.cur+num(x,Math.abs(x)<100?2:0)},c=p.pnl==null?'':p.pnl>0?'pos2':p.pnl<0?'neg2':'';
+  return '<div class="prow"><span class="pdot" style="background:'+p.col+'"></span><div class="pm"><b>'+esc(p.side||'')+' '+esc(p.name)+'</b><small>'+esc(p.src)+' · in '+n(p.entry)+' · now '+n(p.price)+(p.stop!=null?' · stop '+n(p.stop):'')+'</small></div><div class="pv"><b class="'+c+'">'+(p.pnl==null?'–':(p.pnl>0?'+':p.pnl<0?'−':'')+p.cur+num(Math.abs(p.pnl),Math.abs(p.pnl)<100?2:0))+'</b><small class="'+c+'">'+(p.r!=null?rfmt(p.r):p.pct!=null?(p.pct>0?'+':p.pct<0?'−':'')+Math.abs(p.pct*100).toFixed(2)+'%':'')+'</small></div></div>';
+}
+function posFetch(){if(PRO.posBusy||Date.now()-(PRO.posAt||0)<8000)return;PRO.posBusy=true;jf('/api/positions').then(function(j){PRO.pos=j;PRO.posAt=Date.now();PRO.posBusy=false;if(ui.tab==='bots')botsPaint()}).catch(function(){PRO.posBusy=false})}
+function mkSelect(id,val,counts){return '<select id="'+id+'" aria-label="Market">'+MKOPT.map(function(o){return '<option value="'+o[0]+'"'+(val===o[0]?' selected':'')+'>'+o[1]+(counts&&counts[o[0]]!=null?' ('+counts[o[0]]+')':'')+'</option>'}).join('')+'</select>'}
 function botsPaint(){
-  var el=$('#botsroot');if(!el)return;var L=LAB.d,F=PRO.feeds,mk=LAB.mk,h='';
-  h+='<div class="sect"><h3>AI Lab bots</h3><span class="seg">'+['CRYPTO','IN'].map(function(k){return '<button data-botmk="'+k+'" class="'+(mk===k?'on':'')+'" style="min-height:30px;padding:3px 12px">'+(k==='IN'?'India':'Crypto')+'</button>'}).join('')+'</span></div>';
+  var el=$('#botsroot');if(!el)return;
+  var ae=document.activeElement;if(ae&&ae.tagName==='SELECT'&&el.contains(ae))return;
+  var L=LAB.d,F=PRO.feeds,mk=LAB.mk,h='';
+  h+='<div class="sect"><h3>AI Lab bots</h3><select id="botmk" aria-label="Bot market"><option value="CRYPTO"'+(mk==='CRYPTO'?' selected':'')+'>Crypto ($)</option><option value="IN"'+(mk==='IN'?' selected':'')+'>India (₹)</option></select></div>';
   h+=L?'<div class="bgrid">'+L.bots.map(function(b){return botCard(b,mk)}).join('')+'</div>':'<div class="bgrid"><div class="skel" style="height:120px"></div><div class="skel" style="height:120px"></div></div>';
-  if(L){var open=(L.positions||[]).filter(function(p){return (p.cur==='₹')===(mk==='IN')});h+='<div class="sect"><h3>Open positions'+(open.length?' · '+open.length:'')+'</h3><button data-tab="lab" style="min-height:28px;padding:2px 10px;font-size:12px">AI Lab →</button></div>';
-    h+='<div class="card">'+(open.length?open.slice(0,8).map(function(p){var r=p.r;return '<div class="hrow"><span class="d"><i style="display:inline-block;width:9px;height:9px;border-radius:3px;background:'+(BOTCOL[p.bot]||'#555')+'"></i></span><div class="x"><b>'+esc(p.bot)+' · '+esc(p.side)+' '+esc(p.name||p.sym)+'</b><div class="h">'+(p.entry!=null?'in '+p.cur+num(p.entry,p.entry<100?2:0):'')+(p.last!=null?' · now '+p.cur+num(p.last,p.last<100?2:0):'')+(p.stop!=null?' · stop '+num(p.stop,p.stop<100?2:0):'')+'</div></div>'+(r!=null?'<span class="num '+rcls(r)+'"><b>'+rfmt(r)+'</b></span>':'')+'</div>'}).join(''):'<div class="sub">No open positions. Bots act on closed 15-minute bars when their market is open.</div>')+'</div>'}
+  var ps=allPos(),counts={ALL:ps.length,IN:0,CRYPTO:0,GLOBAL:0};ps.forEach(function(p){if(counts[p.mk]!=null)counts[p.mk]++});
+  var shown=ps.filter(function(p){return APP.mk==='ALL'||p.mk===APP.mk});
+  h+='<div class="sect"><h3>Open positions · '+shown.length+'</h3>'+mkSelect('posmk',APP.mk,counts)+'</div>';
+  h+='<div class="card">'+(shown.length?shown.slice(0,40).map(posRow).join(''):'<div class="sub">'+((L&&PRO.pos)?'No open positions'+(APP.mk==='ALL'?'':' in this market')+'. Bots act on closed 15-minute bars when their market is open.':'Loading…')+'</div>')+'</div>';
   h+='<div class="sect"><h3>Paper books · per market</h3><span class="hint">tap to open</span></div><div style="display:grid;gap:8px">'+(F&&F.slots?F.slots.map(slotCard).join(''):'<div class="skel" style="height:64px"></div><div class="skel" style="height:64px"></div>')+'</div>';
   el.innerHTML=h;
 }
 function botsTab(){
   if(!$('#botsroot')){$('#view').innerHTML='<div id="botsroot"></div>';botsPaint()}
-  if(Date.now()-LAB.at>8000)labFetch();if(!PRO.feedsBusy&&Date.now()-PRO.feedsAt>10000){PRO.feedsBusy=true;jf('/api/feeds').then(function(j){PRO.feeds=j;PRO.feedsAt=Date.now();PRO.feedsBusy=false;if(ui.tab==='bots')botsPaint()}).catch(function(){PRO.feedsBusy=false})}
+  if(Date.now()-LAB.at>8000)labFetch();posFetch();
+  if(!PRO.feedsBusy&&Date.now()-PRO.feedsAt>10000){PRO.feedsBusy=true;jf('/api/feeds').then(function(j){PRO.feeds=j;PRO.feedsAt=Date.now();PRO.feedsBusy=false;if(ui.tab==='bots')botsPaint()}).catch(function(){PRO.feedsBusy=false})}
   if(PRO.botsSeen!==LAB.at){PRO.botsSeen=LAB.at;botsPaint()}
 }
 /* keep Bots fresh when lab data arrives */
@@ -1281,6 +1319,55 @@ var _labFetch=labFetch;labFetch=function(){_labFetch.apply(this,arguments);};
 setInterval(function(){if(ui.tab==='bots'||ui.tab==='home')render()},6000);
 setTimeout(function(){window.scrollTo(0,0)},60);
 
+
+/* ---------- slot cards: show open counts (paper book + AI Lab) ---------- */
+var _slotCard=slotCard;
+slotCard=function(s){
+  var h=_slotCard(s),n=s.open||0,mk=LABSLOT[s.slot],lab=(mk&&LAB.d)?(LAB.d.positions||[]).filter(function(p){return (p.cur==='₹'?'IN':'CRYPTO')===mk}).length:0;
+  var x='<div class="slotx"><span class="pill2">'+n+' open</span>'+(lab?'<span class="pill2">+ '+lab+' AI Lab</span>':'')+'</div>';
+  return h.replace(/<\/button>$/,x+'</button>');
+};
+/* ---------- market dropdown instead of a row of 8 buttons ---------- */
+var SLOTNAME={nse:'India live',fno:'F&O',instocks:'India stocks',gstocks:'Global stocks',macro:'Commodities & FX',india:'India ETFs',crypto:'Crypto',practice:'Practice'};
+var _renderCtrl=renderCtrl;
+renderCtrl=function(){
+  _renderCtrl();
+  var r1=document.querySelector('#ctrl .r1');if(!r1||!snap||!snap.server||!snap.server.slots)return;
+  r1.innerHTML='<label class="msel"><span>Market</span><select id="slotsel" aria-label="Market">'+snap.server.slots.map(function(x){return '<option value="'+x.slot+'"'+(ui.slot===x.slot?' selected':'')+'>'+(SLOTNAME[x.slot]||x.slot)+'</option>'}).join('')+'</select></label>';
+};
+/* ---------- AI Lab positions also appear in the matching market's Paper-books view ---------- */
+function labPosCard(){
+  var mk=LABSLOT[ui.slot];if(!mk||!LAB.d)return '';
+  var ps=(LAB.d.positions||[]).filter(function(p){return (p.cur==='₹'?'IN':'CRYPTO')===mk}).map(function(p){return {src:'AI Lab · bot '+p.bot,col:BOTCOL[p.bot]||'#555',name:p.name||p.sym,side:p.side,cur:p.cur,entry:p.entry,price:p.last,stop:p.stop,pnl:p.pnl,r:p.r}});
+  return '<div class="card" id="labpos" style="margin-bottom:10px"><div class="row"><h2>AI Lab bots · open in '+(mk==='IN'?'India':'Crypto')+' · '+ps.length+'</h2><button data-tab="bots" style="min-height:28px;padding:2px 10px;font-size:12px">All bots →</button></div>'+(ps.length?ps.map(posRow).join(''):'<div class="sub">No open AI Lab positions in this market.</div>')+'</div>';
+}
+var _render=render;
+render=function(){
+  _render();
+  try{if(ui.tab==='overview'){var v=$('#view'),o=$('#labpos');if(o)o.remove();var h=labPosCard();if(v&&h)v.insertAdjacentHTML('afterbegin',h);if(!LAB.d||Date.now()-LAB.at>15000)labFetch()}}catch(e){}
+};
+/* ---------- Markets / Charts: market + symbol dropdowns ---------- */
+function qMk(q){return q.cur==='₹'?'IN':/-USD$/.test(q.sym)?'CRYPTO':'GLOBAL'}
+function chStrip(){
+  var el=$('#chstrip');if(!el||!LAB.px)return;
+  var px=LAB.px,cur=px.filter(function(q){return q.sym===LAB.ch.sym})[0];
+  if(cur&&APP.chmk!=='ALL'&&qMk(cur)!==APP.chmk)APP.chmk=qMk(cur);
+  var list=px.filter(function(q){return APP.chmk==='ALL'||qMk(q)===APP.chmk}),cnt={ALL:px.length,IN:0,CRYPTO:0,GLOBAL:0};px.forEach(function(q){cnt[qMk(q)]++});
+  var fmt=function(q){return q.cur+(+q.price).toLocaleString('en-IN',{maximumFractionDigits:q.price<10?4:2})};
+  var chg=function(q){var c=q.chg==null?null:q.chg*100;return c==null?'':'<span class="'+cls2(c)+'">'+lsgn(c)+'%</span>'};
+  el.style.display='block';el.style.overflow='visible';
+  el.innerHTML='<div class="chsel"><select id="chmkt" aria-label="Market">'+MKOPT.map(function(o){return '<option value="'+o[0]+'"'+(APP.chmk===o[0]?' selected':'')+'>'+o[1]+' ('+cnt[o[0]]+')</option>'}).join('')+'</select><select id="chsymsel" aria-label="Symbol">'+list.map(function(q){return '<option value="'+esc(q.sym)+'"'+(q.sym===LAB.ch.sym?' selected':'')+'>'+esc(q.name||q.sym)+(q.price!=null?' · '+fmt(q):' · n/a')+'</option>'}).join('')+'</select></div>'+
+    (cur&&cur.price!=null?'<div class="chq"><b>'+esc(cur.name||cur.sym)+'</b><span class="num">'+fmt(cur)+'</span>'+chg(cur)+'<span class="sub">'+(cur.open?'market open':'market closed')+'</span></div>':'')+
+    '<div class="chchips">'+list.map(function(q){return '<button class="chip'+(q.sym===LAB.ch.sym?' on':'')+'" data-chsym="'+esc(q.sym)+'">'+esc(q.name||q.sym)+(q.price!=null?' '+chg(q):'')+'</button>'}).join('')+'</div>';
+}
+document.addEventListener('change',function(e){
+  var id=e.target&&e.target.id,v=e.target&&e.target.value;
+  if(id==='chmkt'){APP.chmk=v;var f=(LAB.px||[]).filter(function(q){return v==='ALL'||qMk(q)===v})[0];if(f){LAB.ch.sym=f.sym;LAB.ch.data=null;chStrip();chPaint(true);chLoad(true)}else chStrip()}
+  else if(id==='chsymsel'){LAB.ch.sym=v;LAB.ch.data=null;chStrip();chPaint(true);chLoad(true)}
+  else if(id==='slotsel'){if(v!==ui.slot){ui.slot=v;try{localStorage.setItem('paperbot4:slot',v)}catch(x){}snap=null;$('#status').textContent='loading '+v+'…';poll().then(function(){openStream()})}}
+  else if(id==='posmk'){APP.mk=v;botsPaint()}
+  else if(id==='botmk'){LAB.mk=v;botsPaint()}
+},true);
 try{if(!nseClock().open)LAB.mk='CRYPTO'}catch(e){}
 APPREADY=true;(function(){var h=location.hash.slice(1);if(h&&TABS.some(function(t){return t[0]===h}))ui.tab=h})();renderTabs();try{render()}catch(e){}
 

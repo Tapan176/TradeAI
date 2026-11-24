@@ -501,7 +501,22 @@ function strategyRegistry() {
   return { ts: Date.now(), summary: sum, groups };
 }
 function summary() {
-  return Object.keys(slots).map(n => { const s = slots[n], m = s.bot && s.bot.metrics(); return { slot: n, label: DEFS[n].label, ready: !!s.bot, paused: s.paused, equity: m ? m.equity : null, pnlPct: m ? m.totalPnlPct : null, currency: s.bot ? s.bot.state.cfg.currency : '$', feed: s.bot ? s.bot.state.feed.mode : null, note: s.bot ? s.bot.state.feed.note : s.note }; });
+  return Object.keys(slots).map(n => { const s = slots[n], m = s.bot && s.bot.metrics(); return { slot: n, label: DEFS[n].label, ready: !!s.bot, paused: s.paused, equity: m ? m.equity : null, pnlPct: m ? m.totalPnlPct : null, currency: s.bot ? s.bot.state.cfg.currency : '$', feed: s.bot ? s.bot.state.feed.mode : null, note: s.bot ? s.bot.state.feed.note : s.note, open: s.bot && Array.isArray(s.bot.state.positions) ? s.bot.state.positions.length : 0 }; });
+}
+/* open positions of every paper-book slot (compact; used by the dashboard's per-market open-positions view) */
+function slotPositions() {
+  return Object.keys(slots).map(n => {
+    const s = slots[n], S = s.bot && s.bot.state, out = { slot: n, label: DEFS[n].label, ready: !!S, currency: S && S.cfg ? S.cfg.currency : '$', positions: [] };
+    if (!S || !Array.isArray(S.positions)) return out;
+    try {
+      out.positions = S.positions.map(p => {
+        const y = S.symbols && S.symbols[p.symbol], pr = y ? y.price : (p.last != null ? p.last : null), cost = p.cost != null ? p.cost : (p.qty && p.entry ? p.qty * p.entry : null);
+        const pnl = pr != null && p.qty && cost != null ? p.qty * pr - cost : null;
+        return { symbol: p.symbol, name: (y && y.name) || p.name || p.symbol, side: p.side || 'LONG', strategy: p.strategy || null, qty: p.qty, entry: p.entry, price: pr, stop: p.stop != null ? p.stop : null, tp: p.tp != null ? p.tp : null, pnl: pnl, pnlPct: pnl != null && cost ? pnl / cost : null, openTs: p.openTs || null };
+      });
+    } catch (e) { out.err = String(e.message || e); }
+    return out;
+  });
 }
 function push(sl) { if (!sl.clients.size) return; const d = 'data: ' + body(sl) + '\n\n'; sl.clients.forEach(c => { try { c.write(d); } catch (e) { sl.clients.delete(c); } }); }
 const authed = (req, url) => TOKEN && (req.headers['x-admin-token'] === TOKEN || url.searchParams.get('token') === TOKEN);
@@ -513,6 +528,7 @@ const server = http.createServer(async (req, res) => {
   const sl = slots[url.searchParams.get('bot') || (slots.nse ? 'nse' : slots.india ? 'india' : Object.keys(slots)[0])];
   if (url.pathname === '/healthz') return send(200, { ok: true, up: process.uptime() | 0, slots: summary().map(s => ({ slot: s.slot, ready: s.ready, feed: s.feed })) });
   if (url.pathname === '/api/slots') return send(200, summary());
+  if (url.pathname === '/api/positions') return send(200, slotPositions());
   if (url.pathname === '/api/segments') return send(200, segmentReport());
   if (url.pathname === '/api/setups') {
     const LBL = { nse: 'India live', india: 'India ETFs', instocks: 'India stocks', gstocks: 'Global stocks', macro: 'Commodities & FX', crypto: 'Crypto', practice: 'Practice' };
