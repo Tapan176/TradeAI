@@ -246,7 +246,7 @@ function candleChart(id,sym,W){
   var lines=line(es,'var(--yellow)',1.6)+line(ef,'var(--violet)',1.6);
   var lv='';
   if(pos){
-    [['entry',pos.entry,'var(--mut)','','entry'],['stop',pos.stop,'var(--crit)','5 3','stop'],['tp',pos.tp,'var(--good)','5 3','target']].forEach(function(a){
+    [['entry',pos.entry,'var(--mut)','','entry'],['stop',pos.stop,'var(--crit)','5 3','stop'],['tp',pos.tp,'var(--good)','5 3','target']].filter(function(a){return !(a[0]==='tp'&&pos.tp>pos.entry*3)}).forEach(function(a){
       lv+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+Y(a[1])+'" y2="'+Y(a[1])+'" stroke="'+a[2]+'" stroke-width="1.2"'+(a[3]?' stroke-dasharray="'+a[3]+'"':'')+'/><text x="'+(L+2)+'" y="'+(Y(a[1])-3)+'" fill="var(--ink2)" font-size="10">'+a[4]+' '+fmtP(a[1])+'</text>';
     });
   }
@@ -308,7 +308,7 @@ function drawCandlesLW(ph){
   mk.sort(function(x,y){return x.time-y.time});o.mk.setMarkers(mk);
   o.lines.forEach(function(l){try{o.cs.removePriceLine(l)}catch(e){}});o.lines=[];
   var pos=snap.positions.filter(function(p){return p.symbol===sym&&p.stop&&p.tp&&!p.legs})[0];
-  if(pos)[['entry',pos.entry,cssv('--mut'),0],['stop',pos.stop,cssv('--crit'),2],['target',pos.tp,cssv('--good'),2]].forEach(function(a){o.lines.push(o.cs.createPriceLine({price:a[1],color:a[2],lineWidth:1,lineStyle:a[3],axisLabelVisible:true,title:a[0]}))});
+  if(pos)[['entry',pos.entry,cssv('--mut'),0],['stop',pos.stop,cssv('--crit'),2],['target',pos.tp,cssv('--good'),2]].filter(function(a){return !(a[0]==='target'&&pos.tp>pos.entry*3)}).forEach(function(a){o.lines.push(o.cs.createPriceLine({price:a[1],color:a[2],lineWidth:1,lineStyle:a[3],axisLabelVisible:true,title:a[0]}))});
   if(o.first){o.chart.timeScale().setVisibleLogicalRange({from:Math.max(0,n-80),to:n+3});o.first=false}
 }
 function drawEquityLW(ph){
@@ -363,11 +363,11 @@ function kpis(m){
   '</div>';
 }
 function posCard(p){
-  var span=p.tp-p.stop,x=Math.max(0,Math.min(1,(p.price-p.stop)/span))*100,e=(p.entry-p.stop)/span*100;
+  var far=p.tp>p.entry*3,top=far?p.entry+2*(p.entry-p.stop):p.tp,span=top-p.stop,x=Math.max(0,Math.min(1,(p.price-p.stop)/span))*100,e=(p.entry-p.stop)/span*100;
   return '<div class="pos"><div class="row"><b>'+esc(p.symbol)+'</b><span class="mid">'+arrow(p.pnl)+' '+usd(p.pnl,1)+' <span class="sub">('+pct(p.pnlPct,1,1)+')</span></span></div>'+
    '<div class="sub">'+(p.segment?'<span class="pill">'+esc(SEGNAME[p.segment]||p.segment)+'</span> ':'')+(p.legs?'<span class="pill '+(p.dir<0?'sell':'buy')+'">'+(p.dir<0?'SHORT':'LONG')+'</span> ':'<span class="pill buy">BUY</span> ')+esc(STRAT[p.strategy]||p.strategy)+' · '+(p.lots?p.lots+' lot'+(p.lots>1?'s':'')+' × '+p.lotSize:'qty '+p.qty.toPrecision(4))+' · held '+p.held+' candles'+(p.margin?' · margin '+usd(p.margin):'')+'</div>'+(p.legs?'<div class="sub num">'+esc(p.legs)+' · '+(p.segment==='FUT'?'futures price':p.structure==='credit'?'credit received':'premium paid')+' '+fmtP(p.entry)+' → now '+fmtP(p.price)+'</div>':'')+
    '<div class="bar" aria-label="price between stop and target"><span style="position:absolute;left:'+e+'%;top:0;width:1px;height:6px;background:var(--mut)"></span><b style="left:calc('+x+'% - 1px)"></b></div>'+
-   '<div class="row sub num"><span>stop '+fmtP(p.stop)+'</span><span>now '+fmtP(p.price)+' · in '+fmtP(p.entry)+'</span><span>target '+fmtP(p.tp)+'</span></div></div>';
+   '<div class="row sub num"><span>stop '+fmtP(p.stop)+'</span><span>now '+fmtP(p.price)+' · in '+fmtP(p.entry)+'</span><span>'+(far?'no fixed target':'target '+fmtP(p.tp))+'</span></div></div>';
 }
 function logRows(arr,n){
   return '<div class="log">'+arr.slice(0,n).map(function(l){

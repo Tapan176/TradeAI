@@ -503,7 +503,7 @@
       S.cash -= cost0 + fee;
       S.positions.push({
         id: ++S.seq, symbol: sig.symbol, strategy: sig.strategy, qty, entry: fill, entryFee: fee,
-        cost: cost0 + fee, stop: plan.stop, stop0: plan.stop, tp: plan.tp, high: fill, atr0: plan.atr, trail: plan.trail || cfg.trailAtr,
+        cost: cost0 + fee, stop: plan.stop, stop0: plan.stop, tp: plan.tp, high: fill, atr0: plan.atr, trail: cfg.trailOverride || plan.trail || cfg.trailAtr,
         stopDist0: fill - plan.stop, openCandle: S.candleIdx, openTick: S.tick, openTs: now(), ctx
       });
       log('Executor', 'trade', 'BUY ' + qty.toPrecision(4) + ' ' + sig.symbol + ' @ ' + fmtP(fill) + ' (' + usd(cost0) + ', fee ' + usd(fee) + ') · stop ' + fmtP(plan.stop) + ' · target ' + fmtP(plan.tp));
@@ -537,7 +537,9 @@
     }
     function trailUpdate(pos, px) {
       if (px > pos.high) pos.high = px;
-      if (pos.high - pos.entry >= pos.atr0) pos.stop = Math.max(pos.stop, pos.high - (pos.trail || cfg.trailAtr) * pos.atr0);
+      /* optional profit protection (off unless set): breakeven once +beAtr ATR in profit (stop = entry + round-trip costs), trail starts at trailStartAtr (default 1) */
+      if (cfg.beAtr && pos.high - pos.entry >= cfg.beAtr * pos.atr0) pos.stop = Math.max(pos.stop, pos.entry * (1 + 2 * cfg.feeRate + 2 * cfg.slippage));
+      if (pos.high - pos.entry >= (cfg.trailStartAtr || 1) * pos.atr0) pos.stop = Math.max(pos.stop, pos.high - (cfg.trailOverride && !pos.vp ? cfg.trailOverride : (pos.trail || cfg.trailAtr)) * pos.atr0);
     }
     function manageStops() {
       S.positions.slice().forEach(function (pos) {
@@ -584,6 +586,7 @@
       if (S.positions.length >= cfg.maxPositions) return { ok: false, why: 'max ' + cfg.maxPositions + ' open positions' };
       if (!a.atr || a.atr <= 0) return { ok: false, why: 'ATR unavailable' };
       const p = P(), eq = equity();
+      if (cfg.maxInvestedPct) { const inv = S.positions.reduce((t, x) => t + x.qty * priceOf(x.symbol), 0); if (inv >= eq * cfg.maxInvestedPct) return { ok: false, why: 'invested ' + (inv / eq * 100).toFixed(0) + '% of equity, cap ' + (cfg.maxInvestedPct * 100).toFixed(0) + '%' }; }
       const entry = a.price * (1 + cfg.slippage);
       const sp = STRATEGIES[sig.strategy].plan || {};
       const stopDist = (sp.stopAtr || p.stopAtr) * a.atr, tpDist = (sp.tpAtr || p.tpAtr) * a.atr;
@@ -681,6 +684,7 @@
         const a = S.analysis[id];
         const pos = S.positions.find(x => x.symbol === id);
         if (pos) {
+          if (cfg.timeStopCandles && S.candleIdx - pos.openCandle >= cfg.timeStopCandles && (priceOf(pos.symbol) - pos.entry) < (cfg.timeStopMinR || 0.5) * pos.stopDist0) { log('Strategy', 'signal', 'TIME STOP ' + id + ': under +' + (cfg.timeStopMinR || 0.5) + 'R after ' + (S.candleIdx - pos.openCandle) + ' candles'); sell(pos, 'Time stop'); return; }
           const why = STRATEGIES[pos.strategy].exit(a);
           if (why) { log('Strategy', 'signal', 'SELL signal ' + id + ' (' + pos.strategy + '): ' + why); sell(pos, why); }
           return;

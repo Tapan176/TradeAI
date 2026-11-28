@@ -510,13 +510,14 @@ const FUND_ENV = { india: 'START_BALANCE_INDIA', fno: 'START_BALANCE_FNO', crypt
 /* ---------- editable paper-book amounts ----------
  * Start balance: a deposit/withdrawal — cash, peak and the stored equity curve move by the same delta, so closed P&L is untouched. Open positions keep their size; new sizing applies to the next entry.
  * First edit stores the original values in cfg.defaults (saved with the account) so "reset" works after restarts. */
-const BOOK_LIM = { startBalance: [1, 1e9], maxPositions: [1, 60], sizePct: [0.5, 50] };
+const BOOK_LIM = { startBalance: [1, 1e9], maxPositions: [1, 60], sizePct: [0.5, 50], maxInvestedPct: [10, 100] };   // maxInvestedPct: cap on the share of equity held in open positions (100 = no cap); stock/index/crypto books only
 function bookEdit(n, s) {
   if (n === 'practice' || !s.bot) return { editable: false };
   const c = s.bot.state.cfg, d = c.defaults || {};
   const cur = { startBalance: c.startBalance, maxPositions: c.maxPositions || null, sizePct: c.sizePct ? Math.round(c.sizePct * 1e4) / 100 : null };
-  return { editable: true, values: cur, defaults: { startBalance: d.startBalance != null ? d.startBalance : cur.startBalance, maxPositions: d.maxPositions != null ? d.maxPositions : cur.maxPositions, sizePct: d.sizePct ? Math.round(d.sizePct * 1e4) / 100 : cur.sizePct },
-    capPct: c.maxPositionPct ? Math.round(c.maxPositionPct * 1e4) / 100 : null, limits: BOOK_LIM, edited: !!c.defaults && (c.defaults.startBalance !== c.startBalance || (c.maxPositions || null) !== (c.defaults.maxPositions == null ? null : c.defaults.maxPositions) || (c.sizePct || 0) !== (c.defaults.sizePct || 0)) };
+  if (s.bot.state.kind !== 'fno') cur.maxInvestedPct = c.maxInvestedPct ? Math.round(c.maxInvestedPct * 1e4) / 100 : 100;
+  return { editable: true, values: cur, defaults: Object.assign({ startBalance: d.startBalance != null ? d.startBalance : cur.startBalance, maxPositions: d.maxPositions != null ? d.maxPositions : cur.maxPositions, sizePct: d.sizePct ? Math.round(d.sizePct * 1e4) / 100 : cur.sizePct }, cur.maxInvestedPct != null ? { maxInvestedPct: d.maxInvestedPct ? Math.round(d.maxInvestedPct * 1e4) / 100 : 100 } : {}),
+    capPct: c.maxPositionPct ? Math.round(c.maxPositionPct * 1e4) / 100 : null, limits: BOOK_LIM, edited: !!c.defaults && (c.defaults.startBalance !== c.startBalance || (c.maxPositions || null) !== (c.defaults.maxPositions == null ? null : c.defaults.maxPositions) || (c.sizePct || 0) !== (c.defaults.sizePct || 0) || (cur.maxInvestedPct != null && (c.maxInvestedPct || 0) !== (c.defaults.maxInvestedPct || 0))) };
 }
 async function setBook(n, patch) {
   const s = slots[n]; if (!s || !s.bot) return { ok: false, error: 'unknown or not-running account' };
@@ -528,6 +529,7 @@ async function setBook(n, patch) {
     if (want[k] == null || want[k] === '') continue; const v = +want[k]; if (!isFinite(v)) return { ok: false, error: k + ' must be a number' };
     if (k === 'sizePct' && !c.sizePct) return { ok: false, error: 'this account sizes trades by strategy, not by a fixed percentage' };
     if (k === 'maxPositions' && !c.maxPositions) return { ok: false, error: 'this account has no position-count setting' };
+    if (k === 'maxInvestedPct' && S.kind === 'fno') return { ok: false, error: 'the F&O account sizes by margin, so it has no invested-share cap' };
     if (v < BOOK_LIM[k][0] || v > BOOK_LIM[k][1]) return { ok: false, error: k + ' must be between ' + BOOK_LIM[k][0] + ' and ' + BOOK_LIM[k][1] };
     if (k === 'maxPositions' && Math.round(v) !== v) return { ok: false, error: 'maxPositions must be a whole number' };
     out[k] = v;
@@ -535,11 +537,12 @@ async function setBook(n, patch) {
   if (out.sizePct != null && c.maxPositionPct && out.sizePct / 100 > c.maxPositionPct + 1e-9) return { ok: false, error: 'size per trade cannot exceed this account\'s per-position cap of ' + info.capPct + '%' };
   const m = s.bot.metrics(), isFno = S.kind === 'fno', free = isFno ? m.cash : S.cash;
   if (out.startBalance != null && out.startBalance !== c.startBalance) { const dl = out.startBalance - c.startBalance; if (free + dl < 0) return { ok: false, error: 'only ' + Math.round(free) + ' is free (not in open positions) — close positions first or choose a start of at least ' + Math.ceil(c.startBalance - free) }; }
-  if (!c.defaults) c.defaults = { startBalance: c.startBalance, maxPositions: c.maxPositions || null, sizePct: c.sizePct || 0 };
+  if (!c.defaults) c.defaults = { startBalance: c.startBalance, maxPositions: c.maxPositions || null, sizePct: c.sizePct || 0, maxInvestedPct: c.maxInvestedPct || 0 };
   const ch = [];
   if (out.startBalance != null && out.startBalance !== c.startBalance) { const dl = out.startBalance - c.startBalance; ch.push('start ' + c.startBalance + ' → ' + out.startBalance); if (!isFno) S.cash += dl; S.peak += dl; if (Array.isArray(S.equity)) S.equity.forEach(q => { if (q && typeof q.eq === 'number') q.eq += dl; }); c.startBalance = out.startBalance; }
   if (out.maxPositions != null && out.maxPositions !== c.maxPositions) { ch.push('max positions ' + c.maxPositions + ' → ' + out.maxPositions); c.maxPositions = out.maxPositions; }
   if (out.sizePct != null && Math.abs(out.sizePct / 100 - c.sizePct) > 1e-9) { ch.push('size per trade ' + Math.round(c.sizePct * 1e4) / 100 + '% → ' + out.sizePct + '%'); c.sizePct = out.sizePct / 100; }
+  if (out.maxInvestedPct != null) { const f = out.maxInvestedPct >= 100 ? 0 : out.maxInvestedPct / 100; if (Math.abs(f - (c.maxInvestedPct || 0)) > 1e-9) { ch.push('max invested ' + (c.maxInvestedPct ? Math.round(c.maxInvestedPct * 1e4) / 100 + '%' : 'no cap') + ' → ' + (f ? out.maxInvestedPct + '%' : 'no cap')); c.maxInvestedPct = f; } }
   if (ch.length) { try { if (s.bot.log) s.bot.log('Supervisor', 'info', 'Amounts changed (admin): ' + ch.join(', ')); } catch (e) { /* log is cosmetic */ } await saveAll(); }
   return { ok: true, changed: ch, edit: bookEdit(n, s) };
 }
